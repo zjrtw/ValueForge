@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Get-ChildItem *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(Set-Location *)",
+      "PowerShell(where.exe *)",
+      "Bash(python -c *)",
+      "Bash(pip install *)",
+      "Bash(grep -o *)",
+      "WebSearch(*)"
+    ]
+  }
+}
