@@ -90,7 +90,7 @@
 
 | Done | ID | 테스트 | 설명 | 의존성 | 난이도 | 시간 |
 |---|---|---|---|---|---|---|
-| ☐ | M3-1 | 정규화 유틸리티 | `percentile_rank_score()` 함수 (`src/scoring/normalizer.py`) | M0 | 쉬움 | 1h |
+| ☑ | M3-1 | 정규화 유틸리티 | `percentile_rank_score()` 함수 (`src/scoring/normalizer.py`) | M0 | 쉬움 | 1h |
 | ☐ | M3-2 | Stage 1 필터 | 시가총액, 거래대금, PER, PBR, 상장 기간 필터 | M2-3 | 쉬움 | 2h |
 | ☐ | M3-3 | 가치 스코어러 | PER, PBR, EV/EBITDA, 배당수익률 스코어링 | M3-1 | 쉬움 | 3h |
 | ☐ | M3-4 | 퀄리티 스코어러 | ROE, ROA, 영업이익률, ROE 3년 안정성 | M3-1 | 보통 | 3h |
