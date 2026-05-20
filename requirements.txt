@@ -1,6 +1,6 @@
 # 데이터 수집
 pykrx>=1.0.47
-open-dart-reader>=0.0.14
+opendartreader>=0.3.2
 yfinance>=0.2.40
 
 # 데이터 처리

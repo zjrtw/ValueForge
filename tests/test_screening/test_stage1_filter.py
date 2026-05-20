@@ -82,6 +82,13 @@ class Stage1FilterTest(unittest.TestCase):
 
         self.assertEqual(df.loc[df.index[0], "stock_code"], "005930")
 
+    def test_stage1_filter_returns_empty_when_required_columns_are_missing(self) -> None:
+        df = pd.DataFrame([{"stock_code": "005930", "is_active": 1}])
+
+        result = stage1_filter(df, params=TEST_PARAMS)
+
+        self.assertTrue(result.empty)
+
 
 if __name__ == "__main__":
     unittest.main()

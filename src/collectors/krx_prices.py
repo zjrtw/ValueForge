@@ -7,10 +7,12 @@ from pykrx import stock
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.utils.config import settings
 from src.utils.logger import get_logger
+from src.utils.rate_limiter import RateLimiter
 
 log = get_logger(__name__)
 
 _MARKETS = ("KOSPI", "KOSDAQ")
+_rate_limiter = RateLimiter(min_delay_seconds=0.5)
 
 
 def fetch_daily_price_data(
@@ -100,7 +102,7 @@ def fetch_avg_trading_value_20d(
     rows: list[dict] = []
     for code in codes:
         try:
-            ohlcv = stock.get_market_ohlcv(start_date, query_date, code)
+            ohlcv = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
         except Exception as exc:
             log.warning("krx ohlcv history collection failed", stock_code=code, error=str(exc))
             continue
@@ -145,7 +147,7 @@ def fetch_price_history_1y(
     frames: list[pd.DataFrame] = []
     for code in codes:
         try:
-            history = stock.get_market_ohlcv(start_date, query_date, code)
+            history = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
         except Exception as exc:
             log.warning("krx price history collection failed", stock_code=code, error=str(exc))
             continue
@@ -163,9 +165,9 @@ def fetch_price_history_1y(
 
 
 def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
-    ohlcv = stock.get_market_ohlcv_by_ticker(query_date, market=market)
-    caps = stock.get_market_cap_by_ticker(query_date, market=market)
-    fundamentals = stock.get_market_fundamental_by_ticker(query_date, market=market)
+    ohlcv = _rate_limiter.throttle(stock.get_market_ohlcv_by_ticker)(query_date, market=market)
+    caps = _rate_limiter.throttle(stock.get_market_cap_by_ticker)(query_date, market=market)
+    fundamentals = _rate_limiter.throttle(stock.get_market_fundamental_by_ticker)(query_date, market=market)
 
     ohlcv = _with_stock_code_index(ohlcv)
     caps = _with_stock_code_index(caps)

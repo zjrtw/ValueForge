@@ -10,12 +10,12 @@ def stage1_filter(
     """Stage 1 빠른 필터를 적용해 기본 가치 조건 통과 종목만 반환한다."""
     stage1 = params or screening_params.stage1
 
-    market_cap = pd.to_numeric(df.get("market_cap"), errors="coerce")
-    avg_trading_value = pd.to_numeric(df.get("avg_trading_value_20d"), errors="coerce")
-    per = pd.to_numeric(df.get("per"), errors="coerce")
-    pbr = pd.to_numeric(df.get("pbr"), errors="coerce")
-    listing_days = pd.to_numeric(df.get("listing_days"), errors="coerce")
-    is_active = pd.to_numeric(df.get("is_active"), errors="coerce")
+    market_cap = _numeric_column(df, "market_cap")
+    avg_trading_value = _numeric_column(df, "avg_trading_value_20d")
+    per = _numeric_column(df, "per")
+    pbr = _numeric_column(df, "pbr")
+    listing_days = _numeric_column(df, "listing_days")
+    is_active = _numeric_column(df, "is_active")
 
     mask = (
         (market_cap >= _billion_to_krw(stage1.get("min_market_cap_billion", 0)))
@@ -37,3 +37,8 @@ def _billion_to_krw(value: int | float) -> float:
 
 def _million_to_krw(value: int | float) -> float:
     return float(value) * 1_000_000
+
+
+def _numeric_column(df: pd.DataFrame, column: str) -> pd.Series:
+    values = df[column] if column in df.columns else pd.Series(index=df.index, dtype="float64")
+    return pd.to_numeric(values, errors="coerce")
