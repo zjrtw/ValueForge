@@ -25,6 +25,8 @@ _REQUIRED_VARS = {
     "MAX_TICKERS",
     "LOG_LEVEL",
     "DB_PATH",
+    "KRX_ID",
+    "KRX_PW",
 }
 
 # 실제 값이 없어야 하는 민감 변수
