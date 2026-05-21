@@ -15,7 +15,7 @@ _mock_st.cache_resource = lambda **kw: (lambda f: f)
 _mock_st.cache_data = lambda **kw: (lambda f: f)
 sys.modules.setdefault("streamlit", _mock_st)
 
-from src.ui.pages.about import (  # noqa: E402
+from src.ui.views.about import (  # noqa: E402
     DATA_SOURCES,
     DISCLAIMER,
     PIPELINE_STAGES,
@@ -124,11 +124,11 @@ class ModuleImportTest(unittest.TestCase):
     """about 모듈이 정상적으로 임포트되고 render 함수가 존재하는지 확인한다."""
 
     def test_render_function_exists(self) -> None:
-        from src.ui.pages import about
+        from src.ui.views import about
         self.assertTrue(callable(about.render))
 
     def test_constants_exported(self) -> None:
-        from src.ui.pages import about
+        from src.ui.views import about
         self.assertIsNotNone(about.PIPELINE_STAGES)
         self.assertIsNotNone(about.DATA_SOURCES)
         self.assertIsNotNone(about.DISCLAIMER)

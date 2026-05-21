@@ -50,7 +50,7 @@ class PrepareRadarCoordsTest(unittest.TestCase):
     def test_values_match_input(self) -> None:
         _, r = prepare_radar_coords(_SAMPLE)
         expected = list(_SAMPLE.values())
-        for a, b in zip(r[:-1], expected):
+        for a, b in zip(r[:-1], expected, strict=False):
             self.assertAlmostEqual(a, b)
 
     def test_single_category(self) -> None:
@@ -164,7 +164,9 @@ class DetailPageRadarIntegrationTest(unittest.TestCase):
         sys.modules.setdefault("streamlit", _mock_st)
 
         import importlib
-        import src.ui.pages.detail as detail_mod
+
+        import src.ui.views.detail as detail_mod
+
         importlib.reload(detail_mod)
 
         self.assertFalse(
@@ -173,7 +175,8 @@ class DetailPageRadarIntegrationTest(unittest.TestCase):
         )
 
     def test_detail_imports_render_radar(self) -> None:
-        import src.ui.pages.detail as detail_mod
+        import src.ui.views.detail as detail_mod
+
         self.assertTrue(hasattr(detail_mod, "render_radar"))
 
 

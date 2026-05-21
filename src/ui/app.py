@@ -11,7 +11,7 @@ if str(ROOT_DIR) not in sys.path:
 
 def _load_pages():
     from src.ui.components import freshness_banner
-    from src.ui.pages import about, detail, ranking
+    from src.ui.views import about, detail, ranking
 
     return freshness_banner, about, detail, ranking
 
