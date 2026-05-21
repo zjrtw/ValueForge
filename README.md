@@ -233,6 +233,7 @@ ValueForge/
 | [docs/STORAGE.md](docs/STORAGE.md) | Cloudflare R2 설계 |
 | [docs/STREAMLIT.md](docs/STREAMLIT.md) | 대시보드 설계 |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | 배포 전략 (Docker·VPS·CI/CD) |
+| [docs/HETZNER_MIGRATION.md](docs/HETZNER_MIGRATION.md) | GitHub Actions → Hetzner VPS 전환 가이드 |
 | [docs/ENV_VARS.md](docs/ENV_VARS.md) | 환경 변수 레퍼런스 |
 | [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | 비용 분석 |
 | [docs/FUTURE_UPGRADE.md](docs/FUTURE_UPGRADE.md) | 향후 개선 계획 |
