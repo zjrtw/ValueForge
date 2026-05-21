@@ -1,0 +1,64 @@
+# ValueForge 로컬 개발용 Docker Compose
+#
+# 사용법:
+#   # 전체 종목 파이프라인 실행
+#   docker compose run --rm pipeline
+#
+#   # 소규모 테스트 실행 (50개 종목)
+#   docker compose run --rm pipeline-test
+#
+#   # 날짜 지정 실행
+#   docker compose run --rm pipeline --date 2025-01-20
+#
+#   # 업로드 없이 로컬만 실행
+#   docker compose run --rm pipeline --no-upload
+#
+#   # Streamlit 대시보드 로컬 실행
+#   docker compose up dashboard
+
+services:
+
+  # ── 파이프라인 (기본) ──────────────────────────────────────────────────────
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: valueforge-pipeline:local
+    env_file:
+      - .env
+    environment:
+      - MAX_TICKERS=${MAX_TICKERS:-0}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
+    restart: "no"
+
+  # ── 소규모 테스트 실행 (50개 종목, 업로드 없음) ────────────────────────────
+  pipeline-test:
+    extends:
+      service: pipeline
+    environment:
+      - MAX_TICKERS=50
+      - LOG_LEVEL=DEBUG
+    command: ["--no-upload"]
+
+  # ── Streamlit 대시보드 ─────────────────────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: valueforge-dashboard:local
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src/ui:/app/src/ui   # 핫리로드를 위한 소스 마운트
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s

@@ -97,10 +97,10 @@
 | ☑ | M3-5 | 안전성 스코어러 | 부채비율, 유동비율, 이자보상배율 | M3-1 | 쉬움 | 2h |
 | ☑ | M3-6 | 성장성 스코어러 | 매출·영업이익·EPS·FCF YoY 성장률 | M3-1 | 보통 | 3h |
 | ☑ | M3-7 | 모멘텀 스코어러 | 6개월·3개월·1개월 시장 대비 수익률 | M1-5 | 보통 | 3h |
-| ☐ | M3-8 | Stage 2 스코어링 | 5개 스코어러 복합 점수 산출 | M3-3 ~ M3-7 | 쉬움 | 2h |
-| ☐ | M3-9 | Stage 3 함정 감지기 | 모든 플래그 유형 구현, 자동 탈락 규칙 | M2-3 | 보통 | 5h |
-| ☐ | M3-10 | Stage 4 랭커 | 리스크 페널티 적용, 최종 정렬 | M3-8, M3-9 | 쉬움 | 2h |
-| ☐ | M3-11 | 스크리닝 단위 테스트 | 합성 데이터로 각 Stage 테스트 | M3-2 ~ M3-10 | 보통 | 6h |
+| ☑ | M3-8 | Stage 2 스코어링 | 5개 스코어러 복합 점수 산출 | M3-3 ~ M3-7 | 쉬움 | 2h |
+| ☑ | M3-9 | Stage 3 함정 감지기 | 모든 플래그 유형 구현, 자동 탈락 규칙 | M2-3 | 보통 | 5h |
+| ☑ | M3-10 | Stage 4 랭커 | 리스크 페널티 적용, 최종 정렬 | M3-8, M3-9 | 쉬움 | 2h |
+| ☑ | M3-11 | 스크리닝 단위 테스트 | 합성 데이터로 각 Stage 테스트 | M3-2 ~ M3-10 | 보통 | 6h |
 
 **체크포인트**: `pytest tests/test_screening/ -v` 전체 통과. Stage 1에서 전체 종목의 20-30%가 통과하는지 확인.
 
@@ -110,14 +110,14 @@
 
 | Done | ID | 테스트 | 설명 | 의존성 | 난이도 | 시간 |
 |---|---|---|---|---|---|---|
-| ☐ | M4-1 | R2 클라이언트 팩토리 | `src/storage/r2_client.py`: boto3 클라이언트 생성 | M0 | 쉬움 | 1h |
-| ☐ | M4-2 | 업로드 구현 | `upload_latest`, `upload_backup`, `cleanup_old_backups` | M4-1 | 보통 | 3h |
-| ☐ | M4-3 | 다운로더 구현 | `download_latest_db`, `get_metadata` | M4-1 | 쉬움 | 2h |
-| ☐ | M4-4 | 메타데이터 작성기 | `latest_metadata.json` 생성 및 R2 업로드 | M4-2 | 쉬움 | 1h |
-| ☐ | M4-5 | 파이프라인 러너 | `src/pipeline/runner.py`: 전체 단계 오케스트레이션 | M1~M3, M4-2 | 보통 | 4h |
-| ☐ | M4-6 | 일시적 오류 처리 | `with_retry` 데코레이터, 개별 종목 graceful skip | M4-5 | 보통 | 3h |
-| ☐ | M4-7 | 한국장 캘린더 체크 | `is_trading_day()`, 휴장일 자동 skip | M0 | 쉬움 | 2h |
-| ☐ | M4-8 | 실데이터 End-to-End 테스트 | 실제 데이터로 전체 파이프라인 로컬 실행 | M4-5 | 어려움 | 4h |
+| ☑ | M4-1 | R2 클라이언트 팩토리 | `src/storage/r2_client.py`: boto3 클라이언트 생성 | M0 | 쉬움 | 1h |
+| ☑ | M4-2 | 업로드 구현 | `upload_latest`, `upload_backup`, `cleanup_old_backups` | M4-1 | 보통 | 3h |
+| ☑ | M4-3 | 다운로더 구현 | `download_latest_db`, `get_metadata` | M4-1 | 쉬움 | 2h |
+| ☑ | M4-4 | 메타데이터 작성기 | `latest_metadata.json` 생성 및 R2 업로드 | M4-2 | 쉬움 | 1h |
+| ☑ | M4-5 | 파이프라인 러너 | `src/pipeline/runner.py`: 전체 단계 오케스트레이션 | M1~M3, M4-2 | 보통 | 4h |
+| ☑ | M4-6 | 일시적 오류 처리 | `with_retry` 데코레이터, 개별 종목 graceful skip | M4-5 | 보통 | 3h |
+| ☑ | M4-7 | 한국장 캘린더 체크 | `is_trading_day()`, 휴장일 자동 skip | M0 | 쉬움 | 2h |
+| ☑ | M4-8 | 실데이터 End-to-End 테스트 | 실제 데이터로 전체 파이프라인 로컬 실행 | M4-5 | 어려움 | 4h |
 
 **체크포인트**: 실제 데이터로 파이프라인 실행 후 R2에 `latest.db`, `latest_metadata.json`, `history/YYYY-MM-DD.db` 3개 파일 생성 확인.
 
@@ -127,14 +127,14 @@
 
 | Done | ID | 테스트 | 설명 | 의존성 | 난이도 | 시간 |
 |---|---|---|---|---|---|---|
-| ☐ | M5-1 | 데이터 로더 | R2 다운로드 + `cache_resource` + SQLite 쿼리 함수 | M4-3 | 보통 | 3h |
-| ☐ | M5-2 | 랭킹 페이지 | 메인 테이블, 사이드바 필터, 점수 지표 | M5-1 | 보통 | 6h |
-| ☐ | M5-3 | 종목 상세 페이지 | 점수 레이더, 리스크 플래그, 재무 테이블, 주가 차트 | M5-1 | 보통 | 6h |
-| ☐ | M5-4 | About 페이지 | 방법론 설명, 데이터 소스 안내 | 없음 | 쉬움 | 2h |
-| ☐ | M5-5 | 레이더 차트 컴포넌트 | Plotly 극좌표 재사용 컴포넌트 | M5-2 | 쉬움 | 2h |
-| ☐ | M5-6 | CSV 내보내기 | UTF-8 BOM 다운로드 버튼 (Excel 한글 호환) | M5-2 | 쉬움 | 1h |
-| ☐ | M5-7 | 데이터 최신성 배너 | `run_date` 표시, 2일 이상 오래된 경우 경고 | M5-1 | 쉬움 | 1h |
-| ☐ | M5-8 | Streamlit Cloud 배포 | GitHub 연동, Streamlit Cloud 앱 생성, Secrets 입력 | M5-1 ~ M5-7 | 쉬움 | 2h |
+| ☑ | M5-1 | 데이터 로더 | R2 다운로드 + `cache_resource` + SQLite 쿼리 함수 | M4-3 | 보통 | 3h |
+| ☑ | M5-2 | 랭킹 페이지 | 메인 테이블, 사이드바 필터, 점수 지표 | M5-1 | 보통 | 6h |
+| ☑ | M5-3 | 종목 상세 페이지 | 점수 레이더, 리스크 플래그, 재무 테이블, 주가 차트 | M5-1 | 보통 | 6h |
+| ☑ | M5-4 | About 페이지 | 방법론 설명, 데이터 소스 안내 | 없음 | 쉬움 | 2h |
+| ☑ | M5-5 | 레이더 차트 컴포넌트 | Plotly 극좌표 재사용 컴포넌트 | M5-2 | 쉬움 | 2h |
+| ☑ | M5-6 | CSV 내보내기 | UTF-8 BOM 다운로드 버튼 (Excel 한글 호환) | M5-2 | 쉬움 | 1h |
+| ☑ | M5-7 | 데이터 최신성 배너 | `run_date` 표시, 2일 이상 오래된 경우 경고 | M5-1 | 쉬움 | 1h |
+| ☑ | M5-8 | Streamlit Cloud 배포 | GitHub 연동, Streamlit Cloud 앱 생성, Secrets 입력 | M5-1 ~ M5-7 | 쉬움 | 2h |
 
 **체크포인트**: Streamlit Cloud URL에서 랭킹 페이지와 종목 상세 페이지가 정상 동작하는지 확인.
 
@@ -144,12 +144,12 @@
 
 | Done | ID | 테스트 | 설명 | 의존성 | 난이도 | 시간 |
 |---|---|---|---|---|---|---|
-| ☐ | M6-1 | GitHub Actions 워크플로우 | `daily_pipeline.yml` + `test.yml` | M4-5 | 쉬움 | 2h |
-| ☐ | M6-2 | Dockerfile 작성 | 파이프라인 러너 컨테이너화 | M4-5 | 쉬움 | 2h |
-| ☐ | M6-3 | docker-compose 작성 | 로컬 개발용 compose 파일 | M6-2 | 쉬움 | 1h |
-| ☐ | M6-4 | Hetzner VPS 설정 (선택) | CX11 인스턴스 생성, cron 설정, SSH 키 | M6-2 | 보통 | 3h |
-| ☐ | M6-5 | 환경 변수 문서화 | `.env.example` 완성, README 설정 가이드 | M4-5 | 쉬움 | 1h |
-| ☐ | M6-6 | README 작성 | 설정 가이드, 아키텍처 개요, 문서 링크 | 전체 | 쉬움 | 2h |
+| ☑ | M6-1 | GitHub Actions 워크플로우 | `daily_pipeline.yml` + `test.yml` | M4-5 | 쉬움 | 2h |
+| ☑ | M6-2 | Dockerfile 작성 | 파이프라인 러너 컨테이너화 | M4-5 | 쉬움 | 2h |
+| ☑ | M6-3 | docker-compose 작성 | 로컬 개발용 compose 파일 | M6-2 | 쉬움 | 1h |
+| ☑ | M6-4 | Hetzner VPS 설정 (선택) | CX11 인스턴스 생성, cron 설정, SSH 키 | M6-2 | 보통 | 3h |
+| ☑ | M6-5 | 환경 변수 문서화 | `.env.example` 완성, README 설정 가이드 | M4-5 | 쉬움 | 1h |
+| ☑ | M6-6 | README 작성 | 설정 가이드, 아키텍처 개요, 문서 링크 | 전체 | 쉬움 | 2h |
 
 **체크포인트**: GitHub Actions에서 워크플로우 수동 트리거(`workflow_dispatch`) 후 R2에 파일 업로드 확인.
 
