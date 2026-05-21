@@ -17,7 +17,7 @@ from src.storage.downloader import download_latest_db, get_metadata
 def get_db_connection() -> sqlite3.Connection:
     """R2에서 latest.db를 30분마다 1회 다운로드 후 읽기 전용 연결을 반환한다."""
     db_path = download_latest_db()
-    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 

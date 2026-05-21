@@ -135,7 +135,7 @@ def load_metadata() -> dict:
 ## 4. 랭킹 페이지
 
 ```python
-# src/ui/pages/1_Rankings.py
+# src/ui/views/ranking.py
 
 import streamlit as st
 import pandas as pd
@@ -205,7 +205,7 @@ render()
 ## 5. 종목 상세 페이지
 
 ```python
-# src/ui/pages/2_Stock_Detail.py
+# src/ui/views/detail.py
 
 import streamlit as st
 import plotly.graph_objects as go

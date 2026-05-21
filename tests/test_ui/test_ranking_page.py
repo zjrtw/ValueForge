@@ -17,7 +17,7 @@ _mock_st.cache_resource = lambda **kw: (lambda f: f)
 _mock_st.cache_data = lambda **kw: (lambda f: f)
 sys.modules.setdefault("streamlit", _mock_st)
 
-from src.ui.pages.ranking import apply_filters, build_score_metrics  # noqa: E402
+from src.ui.views.ranking import apply_filters, build_score_metrics  # noqa: E402
 
 # ── 샘플 DataFrame ────────────────────────────────────────────────────────────
 

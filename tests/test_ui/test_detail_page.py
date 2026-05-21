@@ -17,7 +17,7 @@ _mock_st.cache_resource = lambda **kw: (lambda f: f)
 _mock_st.cache_data = lambda **kw: (lambda f: f)
 sys.modules.setdefault("streamlit", _mock_st)
 
-from src.ui.pages.detail import (  # noqa: E402
+from src.ui.views.detail import (  # noqa: E402
     build_radar_data,
     format_fundamentals,
     format_risk_flags,

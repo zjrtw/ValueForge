@@ -25,6 +25,30 @@ def _get_secret(name: str) -> str:
     return ""
 
 
+def _get_endpoint_url() -> str:
+    endpoint_url = _get_secret("R2_ENDPOINT_URL")
+    if endpoint_url:
+        return endpoint_url
+
+    try:
+        import streamlit as st
+
+        account_id = ""
+        if "R2_ACCOUNT_ID" in st.secrets:
+            account_id = str(st.secrets["R2_ACCOUNT_ID"])
+        else:
+            r2_secrets = st.secrets.get("r2", {})
+            if "account_id" in r2_secrets:
+                account_id = str(r2_secrets["account_id"])
+
+        if account_id:
+            return f"https://{account_id}.r2.cloudflarestorage.com"
+    except Exception:
+        pass
+
+    return ""
+
+
 def get_r2_client():
     """Cloudflare R2용 boto3 S3 클라이언트를 생성해 반환한다.
 
@@ -33,7 +57,7 @@ def get_r2_client():
         R2_ACCESS_KEY_ID      — R2 액세스 키
         R2_SECRET_ACCESS_KEY  — R2 시크릿 키
     """
-    endpoint_url = _get_secret("R2_ENDPOINT_URL")
+    endpoint_url = _get_endpoint_url()
     access_key_id = _get_secret("R2_ACCESS_KEY_ID")
     secret_access_key = _get_secret("R2_SECRET_ACCESS_KEY")
 

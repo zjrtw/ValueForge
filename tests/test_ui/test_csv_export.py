@@ -18,7 +18,7 @@ _mock_st.cache_resource = lambda **kw: (lambda f: f)
 _mock_st.cache_data = lambda **kw: (lambda f: f)
 sys.modules.setdefault("streamlit", _mock_st)
 
-from src.ui.pages.ranking import to_csv_bytes  # noqa: E402
+from src.ui.views.ranking import to_csv_bytes  # noqa: E402
 
 _RUN_DATE = "2025-01-20"
 
@@ -145,7 +145,7 @@ class CsvEdgeCaseTest(unittest.TestCase):
         df_empty = pd.DataFrame(columns=_make_df().columns)
         result = to_csv_bytes(df_empty)
         text = result.decode("utf-8-sig")
-        lines = [l for l in text.splitlines() if l.strip()]
+        lines = [line for line in text.splitlines() if line.strip()]
         # 헤더 1줄만 있어야 함
         self.assertEqual(len(lines), 1)
 
@@ -163,7 +163,7 @@ class CsvEdgeCaseTest(unittest.TestCase):
         df_one = _make_df().head(1)
         result = to_csv_bytes(df_one)
         text = result.decode("utf-8-sig")
-        rows = [l for l in text.splitlines() if l.strip()]
+        rows = [line for line in text.splitlines() if line.strip()]
         self.assertEqual(len(rows), 2)  # 헤더 + 데이터 1줄
 
 
