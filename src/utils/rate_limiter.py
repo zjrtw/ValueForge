@@ -1,5 +1,5 @@
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime
 from functools import wraps
 from typing import Any, Callable, TypeVar
 
@@ -42,7 +42,7 @@ class DailyQuotaTracker:
     def __init__(self, daily_limit: int = 10000):
         self.daily_limit = daily_limit
         self._call_count = 0
-        self._reset_date: datetime | None = None
+        self._reset_date: date | None = None
 
     def add_calls(self, count: int) -> bool:
         """

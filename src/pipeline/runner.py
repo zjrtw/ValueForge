@@ -356,14 +356,19 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str) -> pd.DataFrame:
     df = ranked.copy()
     df["run_date"] = run_date_str
     df["rank"] = df["final_rank"]
-    df["market_cap_b"] = pd.to_numeric(df.get("market_cap", None), errors="coerce") / 1e9
+    market_cap = df["market_cap"] if "market_cap" in df.columns else pd.Series(0, index=df.index)
+    df["market_cap_b"] = pd.to_numeric(market_cap, errors="coerce") / 1e9
+    critical_flags = df["critical_flag_count"] if "critical_flag_count" in df.columns else pd.Series(0, index=df.index)
+    high_flags = df["high_flag_count"] if "high_flag_count" in df.columns else pd.Series(0, index=df.index)
+    medium_flags = df["medium_flag_count"] if "medium_flag_count" in df.columns else pd.Series(0, index=df.index)
+    low_flags = df["low_flag_count"] if "low_flag_count" in df.columns else pd.Series(0, index=df.index)
     df["risk_flag_count"] = (
-        pd.to_numeric(df.get("critical_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("high_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("medium_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("low_flag_count", 0), errors="coerce").fillna(0)
+        pd.to_numeric(critical_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(high_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(medium_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(low_flags, errors="coerce").fillna(0)
     ).astype(int)
-    df["highest_severity"] = df.apply(_highest_severity, axis=1)
+    df["highest_severity"] = [_highest_severity(row) for _, row in df.iterrows()]
     return df
 
 
