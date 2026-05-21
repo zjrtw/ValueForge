@@ -11,9 +11,9 @@ import argparse
 import sqlite3
 import sys
 import tempfile
-from datetime import date, datetime
+from contextlib import suppress
+from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -26,8 +26,7 @@ from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
 from src.storage.uploader import R2Uploader
-from src.utils.config import settings
-from src.utils.error_handling import PipelineAbortError, check_collection_threshold
+from src.utils.error_handling import check_collection_threshold
 from src.utils.logger import get_logger
 from src.utils.market_calendar import is_trading_day
 
@@ -104,7 +103,7 @@ def run_pipeline(
 
     except Exception as exc:
         log.error("pipeline_failed", error=str(exc))
-        try:
+        with suppress(Exception):
             repo.record_run_failure(
                 run_date,
                 str(exc),
@@ -112,8 +111,6 @@ def run_pipeline(
                 stocks_with_data=stats.get("stocks_with_data", 0),
                 collection_errors=stats.get("collection_errors", 0),
             )
-        except Exception:
-            pass
         raise
 
     finally:

@@ -1,6 +1,7 @@
 import functools
 import time
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from src.utils.logger import get_logger
 

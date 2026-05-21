@@ -1,7 +1,8 @@
 import time
+from collections.abc import Callable
 from datetime import date, datetime
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from src.utils.logger import get_logger
 

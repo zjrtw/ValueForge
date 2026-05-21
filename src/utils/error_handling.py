@@ -1,7 +1,8 @@
 """파이프라인 오류 처리 유틸리티."""
 from __future__ import annotations
 
-from typing import Callable, TypeVar
+from collections.abc import Callable
+from typing import TypeVar
 
 from src.utils.logger import get_logger
 

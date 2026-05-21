@@ -1,7 +1,7 @@
 """한국 주식시장(KRX) 거래일 판별 유틸리티."""
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import exchange_calendars as xcals
 
@@ -56,4 +56,4 @@ def prev_trading_day(before: date | None = None) -> date:
 def _today_kst() -> date:
     """현재 한국 표준시(UTC+9) 기준 오늘 날짜를 반환한다."""
     from datetime import timedelta
-    return (datetime.now(tz=timezone.utc) + timedelta(hours=9)).date()
+    return (datetime.now(tz=UTC) + timedelta(hours=9)).date()

@@ -8,8 +8,15 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from src.ui.components import freshness_banner
-from src.ui.pages import about, detail, ranking
+
+def _load_pages():
+    from src.ui.components import freshness_banner
+    from src.ui.pages import about, detail, ranking
+
+    return freshness_banner, about, detail, ranking
+
+
+freshness_banner, about, detail, ranking = _load_pages()
 
 st.set_page_config(
     page_title="ValueForge — 한국 주식 가치 스크리너",

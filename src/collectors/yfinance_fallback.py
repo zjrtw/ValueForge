@@ -139,7 +139,7 @@ def _normalize_yfinance_history(
     result.insert(1, "date", result.index.date.astype(str))
     result["trading_value"] = [
         _multiply_or_none(close, volume)
-        for close, volume in zip(result["Close"], result["Volume"])
+        for close, volume in zip(result["Close"], result["Volume"], strict=False)
     ]
     result = result.rename(
         columns={
