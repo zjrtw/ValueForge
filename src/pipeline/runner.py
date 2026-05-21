@@ -11,9 +11,9 @@ import argparse
 import sqlite3
 import sys
 import tempfile
-from datetime import date, datetime
+from contextlib import suppress
+from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import pandas as pd
 
@@ -26,8 +26,7 @@ from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
 from src.storage.uploader import R2Uploader
-from src.utils.config import settings
-from src.utils.error_handling import PipelineAbortError, check_collection_threshold
+from src.utils.error_handling import check_collection_threshold
 from src.utils.logger import get_logger
 from src.utils.market_calendar import is_trading_day
 
@@ -104,7 +103,7 @@ def run_pipeline(
 
     except Exception as exc:
         log.error("pipeline_failed", error=str(exc))
-        try:
+        with suppress(Exception):
             repo.record_run_failure(
                 run_date,
                 str(exc),
@@ -112,8 +111,6 @@ def run_pipeline(
                 stocks_with_data=stats.get("stocks_with_data", 0),
                 collection_errors=stats.get("collection_errors", 0),
             )
-        except Exception:
-            pass
         raise
 
     finally:
@@ -356,14 +353,19 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str) -> pd.DataFrame:
     df = ranked.copy()
     df["run_date"] = run_date_str
     df["rank"] = df["final_rank"]
-    df["market_cap_b"] = pd.to_numeric(df.get("market_cap", None), errors="coerce") / 1e9
+    market_cap = df["market_cap"] if "market_cap" in df.columns else pd.Series(0, index=df.index)
+    df["market_cap_b"] = pd.to_numeric(market_cap, errors="coerce") / 1e9
+    critical_flags = df["critical_flag_count"] if "critical_flag_count" in df.columns else pd.Series(0, index=df.index)
+    high_flags = df["high_flag_count"] if "high_flag_count" in df.columns else pd.Series(0, index=df.index)
+    medium_flags = df["medium_flag_count"] if "medium_flag_count" in df.columns else pd.Series(0, index=df.index)
+    low_flags = df["low_flag_count"] if "low_flag_count" in df.columns else pd.Series(0, index=df.index)
     df["risk_flag_count"] = (
-        pd.to_numeric(df.get("critical_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("high_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("medium_flag_count", 0), errors="coerce").fillna(0)
-        + pd.to_numeric(df.get("low_flag_count", 0), errors="coerce").fillna(0)
+        pd.to_numeric(critical_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(high_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(medium_flags, errors="coerce").fillna(0)
+        + pd.to_numeric(low_flags, errors="coerce").fillna(0)
     ).astype(int)
-    df["highest_severity"] = df.apply(_highest_severity, axis=1)
+    df["highest_severity"] = [_highest_severity(row) for _, row in df.iterrows()]
     return df
 
 

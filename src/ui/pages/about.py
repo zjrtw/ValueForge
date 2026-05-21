@@ -1,11 +1,13 @@
 """About 페이지 — 방법론 설명, 데이터 소스 안내."""
 from __future__ import annotations
 
+from typing import Any
+
 import streamlit as st
 
 # ── 방법론 상수 ───────────────────────────────────────────────────────────────
 
-PIPELINE_STAGES = [
+PIPELINE_STAGES: list[dict[str, Any]] = [
     {
         "id": "Stage 1",
         "name": "빠른 필터",
@@ -61,7 +63,7 @@ PIPELINE_STAGES = [
     },
 ]
 
-DATA_SOURCES = [
+DATA_SOURCES: list[dict[str, Any]] = [
     {
         "name": "pykrx",
         "icon": "📈",

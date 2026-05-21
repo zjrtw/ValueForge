@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, cast
 
 import pandas as pd
 import yfinance as yf
@@ -31,11 +32,13 @@ def fetch_yfinance_daily_price_data(
 
     rows: list[dict] = []
     for item in ticker_df.itertuples(index=False):
-        yf_symbol = _to_yfinance_symbol(item.stock_code, item.market)
+        stock_code = str(item.stock_code)
+        market = str(item.market)
+        yf_symbol = _to_yfinance_symbol(stock_code, market)
         try:
             history = yf.download(yf_symbol, period="5d", interval="1d", progress=False)
         except Exception as exc:
-            log.warning("yfinance daily price collection failed", stock_code=item.stock_code, error=str(exc))
+            log.warning("yfinance daily price collection failed", stock_code=stock_code, error=str(exc))
             continue
 
         latest = _latest_history_row(history)
@@ -46,7 +49,7 @@ def fetch_yfinance_daily_price_data(
         volume = _pick_value(latest, "Volume")
         rows.append(
             {
-                "stock_code": item.stock_code,
+                "stock_code": stock_code,
                 "date": output_date,
                 "close": close,
                 "trading_value": _multiply_or_none(close, volume),
@@ -54,7 +57,7 @@ def fetch_yfinance_daily_price_data(
                 "per": None,
                 "pbr": None,
                 "dividend_yield": None,
-                "market": item.market,
+                "market": market,
             }
         )
 
@@ -74,14 +77,16 @@ def fetch_yfinance_price_history_1y(
 
     frames: list[pd.DataFrame] = []
     for item in ticker_df.itertuples(index=False):
-        yf_symbol = _to_yfinance_symbol(item.stock_code, item.market)
+        stock_code = str(item.stock_code)
+        market = str(item.market)
+        yf_symbol = _to_yfinance_symbol(stock_code, market)
         try:
             history = yf.download(yf_symbol, period="1y", interval="1d", progress=False)
         except Exception as exc:
-            log.warning("yfinance price history collection failed", stock_code=item.stock_code, error=str(exc))
+            log.warning("yfinance price history collection failed", stock_code=stock_code, error=str(exc))
             continue
 
-        normalized = _normalize_yfinance_history(history, item.stock_code, max_rows_per_ticker)
+        normalized = _normalize_yfinance_history(history, stock_code, max_rows_per_ticker)
         if not normalized.empty:
             frames.append(normalized)
 
@@ -114,7 +119,10 @@ def _to_yfinance_symbol(stock_code: str, market: str) -> str:
 def _latest_history_row(history: pd.DataFrame) -> pd.Series | None:
     if history.empty:
         return None
-    return history.dropna(how="all").tail(1).squeeze()
+    latest = history.dropna(how="all")
+    if latest.empty:
+        return None
+    return cast(pd.Series, latest.iloc[-1])
 
 
 def _normalize_yfinance_history(
@@ -129,10 +137,10 @@ def _normalize_yfinance_history(
     result.index = pd.to_datetime(result.index)
     result.insert(0, "stock_code", stock_code)
     result.insert(1, "date", result.index.date.astype(str))
-    result["trading_value"] = result.apply(
-        lambda row: _multiply_or_none(row.get("Close"), row.get("Volume")),
-        axis=1,
-    )
+    result["trading_value"] = [
+        _multiply_or_none(close, volume)
+        for close, volume in zip(result["Close"], result["Volume"], strict=False)
+    ]
     result = result.rename(
         columns={
             "Open": "open",
@@ -152,12 +160,19 @@ def _normalize_yfinance_history(
 
 def _pick_value(row: pd.Series, key: str) -> float | None:
     value = row.get(key)
-    if value is None or pd.isna(value):
+    if value is None or bool(pd.isna(value)):
         return None
-    return float(value)
+    return float(cast(Any, value))
 
 
 def _multiply_or_none(left: object, right: object) -> float | None:
-    if left is None or right is None or pd.isna(left) or pd.isna(right):
+    if left is None or right is None:
         return None
-    return float(left) * float(right)
+    try:
+        left_float = float(cast(Any, left))
+        right_float = float(cast(Any, right))
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(left_float) or pd.isna(right_float):
+        return None
+    return left_float * right_float

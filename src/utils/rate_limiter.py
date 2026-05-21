@@ -1,7 +1,8 @@
 import time
-from datetime import datetime, timedelta
+from collections.abc import Callable
+from datetime import date, datetime
 from functools import wraps
-from typing import Any, Callable, TypeVar
+from typing import Any, TypeVar
 
 from src.utils.logger import get_logger
 
@@ -42,7 +43,7 @@ class DailyQuotaTracker:
     def __init__(self, daily_limit: int = 10000):
         self.daily_limit = daily_limit
         self._call_count = 0
-        self._reset_date: datetime | None = None
+        self._reset_date: date | None = None
 
     def add_calls(self, count: int) -> bool:
         """

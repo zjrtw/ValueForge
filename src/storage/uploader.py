@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -97,7 +97,7 @@ class R2Uploader:
 
         metadata: dict = {
             "run_date": run_date.isoformat(),
-            "completed_at": datetime.now(tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "completed_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "pipeline_version": pipeline_version,
             "stocks_collected": stocks_collected,
             "stage1_pass": stage1_pass,

@@ -1,5 +1,5 @@
+from collections.abc import Iterable
 from datetime import date, datetime, timedelta
-from typing import Iterable
 
 import pandas as pd
 from pykrx import stock

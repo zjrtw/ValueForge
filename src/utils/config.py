@@ -1,10 +1,9 @@
+import os
 from pathlib import Path
-from typing import Optional
 
 import yaml
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 
 _CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
 
@@ -50,9 +49,7 @@ class ScreeningParams:
 settings = Settings()
 screening_params = ScreeningParams()
 
-# pykrx는 os.environ에서 직접 KRX_ID/KRX_PW를 읽으므로 .env 로드 값을 주입한다.
-import os as _os
 if settings.KRX_ID:
-    _os.environ.setdefault("KRX_ID", settings.KRX_ID)
+    os.environ.setdefault("KRX_ID", settings.KRX_ID)
 if settings.KRX_PW:
-    _os.environ.setdefault("KRX_PW", settings.KRX_PW)
+    os.environ.setdefault("KRX_PW", settings.KRX_PW)
