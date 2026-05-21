@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python *)",
+      "Bash(.venv\\\\Scripts\\\\python.exe *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe -m pytest tests/test_screening/test_stage2_scorer.py -v)",
+      "PowerShell(& \".venv\\\\Scripts\\\\python.exe\" -m pytest tests/test_screening/test_stage2_scorer.py -v)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\test_stage2_scorer.py -v)",
+      "PowerShell(where.exe python; python --version)",
+      "PowerShell(pip show *)",
+      "PowerShell(Test-Path *)",
+      "PowerShell(& \"C:\\\\selfProject\\\\FinScope\\\\backend\\\\.venv\\\\Scripts\\\\python.exe\" --version 2>&1)",
+      "PowerShell(py *)",
+      "PowerShell(pip install *)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\test_stage2_scorer.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\test_stage3_traps.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\test_stage4_ranker.py -v 2>&1)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(& \"C:\\\\Users\\\\kosta\\\\AppData\\\\Roaming\\\\npm\\\\node_modules\\\\@anthropic-ai\\\\claude-code\\\\bin\\\\claude.exe\" doctor 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\test_pipeline_integration.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_screening\\\\ -v 2>&1)",
+      "PowerShell(New-Item *)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_storage\\\\test_r2_client.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_storage\\\\test_uploader.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_storage\\\\test_downloader.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_storage\\\\test_metadata.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_runner.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_runner.py -v 2>&1 | Select-Object -Last 10)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_retry.py C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_error_handling.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_retry.py C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_error_handling.py -v 2>&1 | Select-Object -Last 5)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_e2e.py -v 2>&1)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_e2e.py -v 2>&1 | Select-Object -Last 15)",
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_ui\\\\test_data_loader.py -v 2>&1)"
+    ]
+  }
+}
