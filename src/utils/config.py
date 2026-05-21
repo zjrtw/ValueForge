@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     # DART API
     DART_API_KEY: str = ""
 
+    # KRX 정보데이터시스템 API (pykrx)
+    KRX_ID: str = ""
+    KRX_PW: str = ""
+
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""
@@ -45,3 +49,10 @@ class ScreeningParams:
 
 settings = Settings()
 screening_params = ScreeningParams()
+
+# pykrx는 os.environ에서 직접 KRX_ID/KRX_PW를 읽으므로 .env 로드 값을 주입한다.
+import os as _os
+if settings.KRX_ID:
+    _os.environ.setdefault("KRX_ID", settings.KRX_ID)
+if settings.KRX_PW:
+    _os.environ.setdefault("KRX_PW", settings.KRX_PW)

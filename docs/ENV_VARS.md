@@ -30,6 +30,22 @@ DART_API_KEY=a1b2c3d4e5f6...
 
 ---
 
+### KRX_ID / KRX_PW
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | **필수** (파이프라인) |
+| 기본값 | 없음 |
+| 발급 | [KRX 정보데이터시스템](http://data.krx.co.kr/) 회원가입 (무료) |
+| 용도 | pykrx 주가 데이터 수집 시 로그인 (KRX 정책 변경 대응) |
+
+```bash
+KRX_ID=your_krx_id
+KRX_PW=your_krx_password
+```
+
+---
+
 ### R2_ENDPOINT_URL
 
 | 항목 | 내용 |
@@ -130,6 +146,8 @@ DB_PATH=/tmp/valueforge.db
 | 변수 | 파이프라인 서버 | Streamlit Cloud | 로컬 개발 |
 |---|---|---|---|
 | `DART_API_KEY` | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
+| `KRX_ID`       | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
+| `KRX_PW`       | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
 | `R2_ENDPOINT_URL` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
 | `R2_ACCESS_KEY_ID` | ✅ 읽기+쓰기 | ✅ 읽기 전용 | ✅ 읽기+쓰기 |
 | `R2_SECRET_ACCESS_KEY` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
