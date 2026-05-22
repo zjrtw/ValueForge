@@ -40,6 +40,8 @@ jobs:
           R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME:       ${{ secrets.R2_BUCKET_NAME }}
+          KRX_ID:               ${{ secrets.KRX_ID }}
+          KRX_PW:               ${{ secrets.KRX_PW }}
         run: |
           DATE_ARG="${{ github.event.inputs.date_override }}"
           UPLOAD_FLAG=""
