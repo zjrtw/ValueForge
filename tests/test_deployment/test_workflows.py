@@ -20,8 +20,8 @@ class DailyPipelineWorkflowTest(unittest.TestCase):
         self.assertTrue(_DAILY.exists())
 
     def test_uses_project_python_version(self) -> None:
-        self.assertIn('python-version: "3.11"', _text(_DAILY))
-        self.assertNotIn('python-version: "3.13"', _text(_DAILY))
+        self.assertIn('python-version: "3.13"', _text(_DAILY))
+        self.assertNotIn('python-version: "3.11"', _text(_DAILY))
 
     def test_installs_pipeline_requirements(self) -> None:
         text = _text(_DAILY)
@@ -48,14 +48,15 @@ class TestWorkflowTest(unittest.TestCase):
         self.assertTrue(_TEST.exists())
 
     def test_uses_project_python_version(self) -> None:
-        self.assertIn('python-version: "3.11"', _text(_TEST))
-        self.assertNotIn('python-version: "3.13"', _text(_TEST))
+        self.assertIn('python-version: "3.13"', _text(_TEST))
+        self.assertNotIn('python-version: "3.11"', _text(_TEST))
 
 
 class RequirementsSyncTest(unittest.TestCase):
     def test_dart_dependency_version_matches_pipeline(self) -> None:
-        self.assertIn("opendartreader>=0.3.2", _text(_REQ))
-        self.assertIn("opendartreader>=0.3.2", _text(_REQ_PIPELINE))
+        expected = "opendartreader>=0.3.2"
+        self.assertIn(expected, _text(_REQ))
+        self.assertIn(expected, _text(_REQ_PIPELINE))
         self.assertNotIn("opendartreader>=0.2.3,<0.3.0", _text(_REQ))
 
 

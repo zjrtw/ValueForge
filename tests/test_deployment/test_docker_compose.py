@@ -133,8 +133,8 @@ class DashboardDockerfileTest(unittest.TestCase):
     def _text(self) -> str:
         return _DOCKERFILE_DASHBOARD.read_text(encoding="utf-8")
 
-    def test_uses_python_311(self) -> None:
-        self.assertIn("3.11", self._text())
+    def test_uses_python_313(self) -> None:
+        self.assertIn("3.13", self._text())
 
     def test_exposes_8501(self) -> None:
         self.assertIn("8501", self._text())

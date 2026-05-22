@@ -3,7 +3,7 @@
 **한국 주식 가치 스크리너** — KOSPI·KOSDAQ 전 종목 대상 일일 자동 가치투자 스크리닝 플랫폼
 
 [![테스트 CI](https://github.com/zjrtw/ValueForge/actions/workflows/test.yml/badge.svg)](https://github.com/zjrtw/ValueForge/actions/workflows/test.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -54,7 +54,7 @@ ValueForge는 매일 장 마감 후 자동으로 한국 주식 시장 전체를 
 | 스케줄러 | Hetzner CX11 + cron 또는 GitHub Actions | $0~$3.29/월 |
 | 대시보드 | Streamlit Community Cloud | 무료 |
 | 컨테이너 | Docker + Compose | — |
-| 언어 | Python 3.11+ | — |
+| 언어 | Python 3.13+ | — |
 
 ---
 
@@ -62,7 +62,7 @@ ValueForge는 매일 장 마감 후 자동으로 한국 주식 시장 전체를 
 
 ### 사전 요구사항
 
-- Python 3.11+
+- Python 3.13+
 - [DART OpenAPI 키](https://opendart.fss.or.kr) (무료 등록)
 - [Cloudflare R2](https://www.cloudflare.com/developer-platform/r2/) 버킷 및 API 토큰
 
