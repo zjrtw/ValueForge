@@ -120,7 +120,7 @@ def _create_dart_client() -> Any:
     if not settings.DART_API_KEY:
         raise RuntimeError("DART_API_KEY is not configured")
 
-    from opendartreader import OpenDartReader
+    import OpenDartReader
 
     return OpenDartReader(settings.DART_API_KEY)
 

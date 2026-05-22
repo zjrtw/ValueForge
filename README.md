@@ -155,6 +155,8 @@ docker compose up dashboard
 | `R2_ACCESS_KEY_ID` | R2 읽기+쓰기 액세스 키 |
 | `R2_SECRET_ACCESS_KEY` | R2 시크릿 키 |
 | `R2_BUCKET_NAME` | R2 버킷 이름 |
+| `KRX_ID` | KRX 정보데이터시스템 로그인 ID |
+| `KRX_PW` | KRX 정보데이터시스템 로그인 비밀번호 |
 
 매 거래일 17:00 KST에 `.github/workflows/daily_pipeline.yml`이 자동 실행됩니다.
 
