@@ -102,30 +102,54 @@ class RunnerThresholdIntegrationTest(unittest.TestCase):
     """runner._collect 이후 임계값 체크가 정상 동작하는지 검증."""
 
     def test_abort_error_propagated_from_runner(self) -> None:
-        import tempfile
+        import os
         from datetime import date
         from pathlib import Path
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import patch
+
         import pandas as pd
 
         tickers = pd.DataFrame([{"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"}])
         prices = pd.DataFrame()  # 빈 DataFrame → n_errors = n_collected
 
-        patches = [
-            patch("src.pipeline.runner.fetch_ticker_list", return_value=tickers),
-            patch("src.pipeline.runner.fetch_daily_price_data", return_value=prices),
-            patch("src.pipeline.runner.fetch_avg_trading_value_20d", return_value=pd.DataFrame()),
-            patch("src.pipeline.runner.fetch_financial_statements", return_value=pd.DataFrame()),
-            patch("src.pipeline.runner.R2Uploader"),
-        ]
-        started = [p.start() for p in patches]
+        env_patch = patch.dict(
+            os.environ,
+            {
+                "KRX_ID": "",
+                "KRX_PW": "",
+                "HTTP_PROXY": "",
+                "HTTPS_PROXY": "",
+                "http_proxy": "",
+                "https_proxy": "",
+                "ALL_PROXY": "",
+                "all_proxy": "",
+            },
+        )
+        env_patch.start()
 
         try:
+            from src.pipeline import runner
+
+            patches = [
+                patch.object(runner, "fetch_ticker_list", return_value=tickers),
+                patch.object(runner, "fetch_daily_price_data", return_value=prices),
+                patch.object(runner, "fetch_avg_trading_value_20d", return_value=pd.DataFrame()),
+                patch.object(runner, "fetch_financial_statements", return_value=pd.DataFrame()),
+                patch.object(runner, "R2Uploader"),
+            ]
+            for p in patches:
+                p.start()
+
             from src.pipeline.runner import run_pipeline
-            with tempfile.TemporaryDirectory() as tmp:
-                db_path = Path(tmp) / "test.db"
+
+            db_path = Path("test_threshold_abort.db")
+            try:
                 with self.assertRaises(PipelineAbortError):
                     run_pipeline(date(2025, 1, 20), db_path=db_path, upload=False)
+            finally:
+                if db_path.exists():
+                    db_path.unlink()
         finally:
             for p in patches:
                 p.stop()
+            env_patch.stop()

@@ -1,5 +1,5 @@
 # ── Stage 1: 의존성 빌드 ────────────────────────────────────────────────────
-FROM python:3.11-slim AS builder
+FROM python:3.13-slim AS builder
 
 WORKDIR /build
 
@@ -19,7 +19,7 @@ RUN pip install --upgrade pip --quiet \
 
 
 # ── Stage 2: 런타임 이미지 ─────────────────────────────────────────────────
-FROM python:3.11-slim AS runtime
+FROM python:3.13-slim AS runtime
 
 # 보안: 비루트 사용자
 RUN groupadd --gid 1000 appgroup \

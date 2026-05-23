@@ -1,5 +1,5 @@
 # Streamlit 대시보드 전용 이미지
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 

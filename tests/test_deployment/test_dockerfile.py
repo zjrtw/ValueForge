@@ -48,11 +48,11 @@ class MultiStageBuildTest(unittest.TestCase):
     def test_runtime_stage_named(self) -> None:
         self.assertIn("AS runtime", _text())
 
-    def test_uses_python_311(self) -> None:
+    def test_uses_python_313(self) -> None:
         from_lines = [l for l in _lines() if re.match(r"^FROM\s", l, re.IGNORECASE)]
         self.assertTrue(
-            any("3.11" in l for l in from_lines),
-            "Python 3.11 기반 이미지를 사용해야 합니다.",
+            any("3.13" in l for l in from_lines),
+            "Python 3.13 기반 이미지를 사용해야 합니다.",
         )
 
     def test_uses_slim_image(self) -> None:

@@ -2,25 +2,21 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar
 
 from src.utils.logger import get_logger
 
 log = get_logger(__name__)
 
-_T = TypeVar("_T")
-
-
 class PipelineAbortError(RuntimeError):
     """수집 성공률이 임계값 미만일 때 파이프라인을 중단시킨다."""
 
 
-def collect_with_skip(
-    fn: Callable[[], _T],
+def collect_with_skip[T](
+    fn: Callable[[], T],
     *,
     stock_code: str,
     errors: list[str] | None = None,
-) -> _T | None:
+) -> T | None:
     """단일 종목 수집을 시도하고 실패 시 None을 반환한다.
 
     파이프라인 전체를 중단하지 않고 해당 종목만 건너뛴다.

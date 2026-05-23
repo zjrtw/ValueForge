@@ -64,7 +64,7 @@ class ReadmeStructureTest(unittest.TestCase):
         self.assertIn("badge.svg", _text())
 
     def test_has_python_version_badge(self) -> None:
-        self.assertIn("python-3.11", _text())
+        self.assertIn("python-3.13", _text())
 
 
 class ReadmeDocLinksTest(unittest.TestCase):
