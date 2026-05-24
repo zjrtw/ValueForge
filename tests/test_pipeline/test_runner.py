@@ -387,6 +387,39 @@ class RunPipelineTest(unittest.TestCase):
             for p in patches:
                 p.stop()
 
+    def test_uploads_db_after_marking_run_success(self) -> None:
+        patches = _patch_collectors()
+        started = [p.start() for p in patches]
+        mock_uploader = MagicMock()
+        started[-1].return_value = mock_uploader
+
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                db_path = Path(tmp) / "test.db"
+
+                def assert_success_before_upload(uploaded_path: Path) -> None:
+                    conn = sqlite3.connect(str(uploaded_path))
+                    row = conn.execute(
+                        "SELECT status FROM pipeline_runs WHERE run_date = ?",
+                        (_RUN_DATE.isoformat(),),
+                    ).fetchone()
+                    conn.close()
+                    self.assertIsNotNone(row)
+                    self.assertEqual(row[0], "SUCCESS")
+
+                mock_uploader.upload_latest.side_effect = assert_success_before_upload
+
+                with patch(
+                    "src.pipeline.runner.Repository.get_screening_dataset",
+                    return_value=_SCREENING_DATASET,
+                ):
+                    run_pipeline(_RUN_DATE, db_path=db_path, upload=True)
+
+            mock_uploader.upload_latest.assert_called_once()
+        finally:
+            for p in patches:
+                p.stop()
+
     def test_records_run_failure_on_exception(self) -> None:
         patches = _patch_collectors()
         started = [p.start() for p in patches]

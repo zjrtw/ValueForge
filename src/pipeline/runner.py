@@ -93,12 +93,13 @@ def run_pipeline(
         conn.commit()
         log.info("pipeline_db_optimized")
 
+        repo.record_run_success(run_date, **stats)
+        log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
+
         # ── Phase 5: R2 업로드 ─────────────────────────────────────────────
         if upload:
             _upload(run_date, _db_path, ranked, stats)
 
-        repo.record_run_success(run_date, **stats)
-        log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
         return stats
 
     except Exception as exc:
