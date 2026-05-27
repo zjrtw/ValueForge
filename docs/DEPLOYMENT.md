@@ -9,10 +9,11 @@
 3. [Docker 설정](#3-docker-설정)
 4. [Hetzner VPS 설정 (권장)](#4-hetzner-vps-설정-권장)
 5. [GitHub Actions 설정 (무료 대안)](#5-github-actions-설정-무료-대안)
-6. [Streamlit Cloud 배포](#6-streamlit-cloud-배포)
-7. [환경 변수 레퍼런스](#7-환경-변수-레퍼런스)
-8. [CI/CD](#8-cicd)
-9. [추천 Python 라이브러리](#9-추천-python-라이브러리)
+6. [Cloudflare Workers 백업 스케줄러](#6-cloudflare-workers-백업-스케줄러)
+7. [Streamlit Cloud 배포](#7-streamlit-cloud-배포)
+8. [환경 변수 레퍼런스](#8-환경-변수-레퍼런스)
+9. [CI/CD](#9-cicd)
+10. [추천 Python 라이브러리](#10-추천-python-라이브러리)
 
 ---
 
@@ -272,7 +273,32 @@ jobs:
 
 ---
 
-## 6. Streamlit Cloud 배포
+## 6. Cloudflare Workers 백업 스케줄러
+
+GitHub Actions cron이 지연·스킵될 때 자동으로 파이프라인을 백업 트리거한다.
+
+```
+08:00 UTC  →  GitHub Actions 자체 cron 시도
+08:30 UTC  →  Cloudflare Workers 실행
+              ├─ 오늘 성공/진행 중인 run 있음  →  스킵
+              └─ 오늘 run 없음                →  workflow_dispatch 트리거
+```
+
+- **소스**: [infra/cf-scheduler/](../infra/cf-scheduler/)
+- **상세 설정 가이드**: [CF_SCHEDULER.md](CF_SCHEDULER.md)
+
+```bash
+# 최초 배포
+cd infra/cf-scheduler
+npm install
+npx wrangler login
+npx wrangler secret put GITHUB_PAT   # GitHub PAT 입력
+npx wrangler deploy
+```
+
+---
+
+## 7. Streamlit Cloud 배포
 
 ```bash
 # 1. 코드를 GitHub 저장소에 Push
@@ -298,7 +324,7 @@ bucket_name = "valueforge-bucket"
 
 ---
 
-## 7. 환경 변수 레퍼런스
+## 8. 환경 변수 레퍼런스
 
 ```bash
 # 파이프라인 서버 필수
@@ -318,7 +344,7 @@ MAX_TICKERS=0           # 0=무제한, 50=테스트용 소규모 실행
 
 ---
 
-## 8. CI/CD
+## 9. CI/CD
 
 ```yaml
 # .github/workflows/test.yml
@@ -346,7 +372,7 @@ jobs:
 
 ---
 
-## 9. 추천 Python 라이브러리
+## 10. 추천 Python 라이브러리
 
 ### 데이터 수집
 
