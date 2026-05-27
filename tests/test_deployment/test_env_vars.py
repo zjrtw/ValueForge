@@ -6,8 +6,6 @@ Settings 클래스에 정의된 변수와 일치하는지 확인한다.
 from __future__ import annotations
 
 import re
-import sys
-import types
 import unittest
 from pathlib import Path
 
@@ -23,6 +21,7 @@ _REQUIRED_VARS = {
     "R2_SECRET_ACCESS_KEY",
     "R2_BUCKET_NAME",
     "MAX_TICKERS",
+    "MARKETS",
     "LOG_LEVEL",
     "DB_PATH",
     "KRX_ID",
@@ -154,7 +153,6 @@ class EnvVarsMdTest(unittest.TestCase):
 class ConfigSyncTest(unittest.TestCase):
     def test_settings_vars_match_required_set(self) -> None:
         # Settings 클래스에서 환경변수 필드명 추출
-        import importlib
         # pydantic_settings 없이도 필드명을 파싱으로 확인
         config_text = (_ROOT / "src" / "utils" / "config.py").read_text(encoding="utf-8")
         found = set(re.findall(r"^\s+([A-Z_][A-Z0-9_]*):\s+\w+", config_text, re.MULTILINE))

@@ -12,6 +12,8 @@ log = get_logger(__name__)
 _MARKETS = ("KOSPI", "KOSDAQ")
 _rate_limiter = RateLimiter(min_delay_seconds=0.5)
 
+_VALID_MARKETS = {"KOSPI", "KOSDAQ"}
+
 
 def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
     """KOSPI·KOSDAQ 전 종목 코드·종목명·시장을 DataFrame으로 반환.
@@ -27,8 +29,9 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
     query_date = _normalize_date(base_date)
 
     rows: list[dict] = []
+    selected_markets = _selected_markets()
 
-    for market in _MARKETS:
+    for market in selected_markets:
         _rate_limiter.wait()
         try:
             codes: list[str] = stock.get_market_ticker_list(date=query_date, market=market)
@@ -55,8 +58,23 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
         df = df.head(settings.MAX_TICKERS)
         log.info("ticker count limited for testing", limit=settings.MAX_TICKERS)
 
-    log.info("ticker collection complete", total=len(df))
+    log.info("ticker collection complete", total=len(df), markets=",".join(selected_markets))
     return df
+
+
+def _selected_markets() -> list[str]:
+    """Return markets selected by MARKETS env setting."""
+    raw_markets = settings.MARKETS.strip()
+    if raw_markets.upper() in {"ALL", "BOTH"}:
+        return ["KOSPI", "KOSDAQ"]
+
+    markets = [market.strip().upper() for market in raw_markets.split(",") if market.strip()]
+    invalid = [market for market in markets if market not in _VALID_MARKETS]
+    if invalid or not markets:
+        valid_values = "KOSPI, KOSDAQ, KOSPI,KOSDAQ, ALL"
+        raise ValueError(f"Invalid MARKETS value: {settings.MARKETS}. Use one of: {valid_values}")
+
+    return list(dict.fromkeys(markets))
 
 
 def _normalize_date(base_date: str | None) -> str:

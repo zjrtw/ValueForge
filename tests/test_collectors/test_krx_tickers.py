@@ -6,7 +6,6 @@ import pytest
 
 from src.collectors.krx_tickers import fetch_ticker_list
 
-
 _FAKE_KOSPI = ["005930", "000660", "051910"]
 _FAKE_KOSDAQ = ["091990", "263750", "035900"]
 
@@ -18,6 +17,12 @@ _FAKE_NAMES = {
     "263750": "펄어비스",
     "035900": "JYP Ent.",
 }
+
+
+@pytest.fixture(autouse=True)
+def reset_ticker_settings(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MAX_TICKERS", 0)
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSPI,KOSDAQ")
 
 
 def _patch_pykrx(monkeypatch):
@@ -71,7 +76,6 @@ def test_fetch_ticker_list_stock_names_are_populated(monkeypatch):
 
     result = fetch_ticker_list()
 
-    # 종목명이 종목 코드와 다른지 확인 (실제 이름이 조회됐는지)
     samsung = result[result["stock_code"] == "005930"]
     assert not samsung.empty
     assert samsung.iloc[0]["stock_name"] == "삼성전자"
@@ -88,19 +92,52 @@ def test_fetch_ticker_list_respects_max_tickers_setting(monkeypatch):
 
 def test_fetch_ticker_list_with_max_tickers_zero_returns_all(monkeypatch):
     _patch_pykrx(monkeypatch)
-    monkeypatch.setattr("src.collectors.krx_tickers.settings.MAX_TICKERS", 0)
 
     result = fetch_ticker_list()
 
     assert len(result) == len(_FAKE_KOSPI) + len(_FAKE_KOSDAQ)
 
 
+def test_fetch_ticker_list_respects_kospi_market_setting(monkeypatch):
+    _patch_pykrx(monkeypatch)
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSPI")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == len(_FAKE_KOSPI)
+    assert set(result["market"]) == {"KOSPI"}
+
+
+def test_fetch_ticker_list_respects_kosdaq_market_setting(monkeypatch):
+    _patch_pykrx(monkeypatch)
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSDAQ")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == len(_FAKE_KOSDAQ)
+    assert set(result["market"]) == {"KOSDAQ"}
+
+
+def test_fetch_ticker_list_respects_all_market_setting(monkeypatch):
+    _patch_pykrx(monkeypatch)
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "ALL")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == len(_FAKE_KOSPI) + len(_FAKE_KOSDAQ)
+    assert set(result["market"]) == {"KOSPI", "KOSDAQ"}
+
+
+def test_fetch_ticker_list_rejects_invalid_market_setting(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KONEX")
+
+    with pytest.raises(ValueError, match="Invalid MARKETS value"):
+        fetch_ticker_list()
+
+
 def test_fetch_ticker_list_handles_ticker_list_error(monkeypatch):
     """시장별 API 호출 실패 시 해당 시장을 건너뛰고 계속 진행한다."""
-    call_count = {"n": 0}
-
     def fake_ticker_list(date, market):
-        call_count["n"] += 1
         if market == "KOSPI":
             raise RuntimeError("API 오류")
         return _FAKE_KOSDAQ
@@ -114,7 +151,6 @@ def test_fetch_ticker_list_handles_ticker_list_error(monkeypatch):
 
     result = fetch_ticker_list()
 
-    # KOSPI 실패 → KOSDAQ만 반환
     assert len(result) == len(_FAKE_KOSDAQ)
     assert set(result["market"]) == {"KOSDAQ"}
 
@@ -133,7 +169,6 @@ def test_fetch_ticker_list_handles_name_fetch_error(monkeypatch):
 
     result = fetch_ticker_list()
 
-    # 이름 조회 실패 시 코드를 이름으로 사용
     assert len(result) == len(_FAKE_KOSPI)
     for _, row in result.iterrows():
         assert row["stock_name"] == row["stock_code"]
