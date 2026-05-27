@@ -13,6 +13,10 @@ on:
         description: "R2 업로드 건너뜀 (true/false)"
         required: false
         default: "false"
+      markets:
+        description: "실행 시장 범위 (KOSPI, KOSDAQ, KOSPI,KOSDAQ)"
+        required: false
+        default: "KOSPI"
 
 jobs:
   run-pipeline:
@@ -42,6 +46,7 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           KRX_ID: ${{ secrets.KRX_ID }}
           KRX_PW: ${{ secrets.KRX_PW }}
+          MARKETS: ${{ github.event.inputs.markets || 'KOSPI' }}
         run: |
           DATE_ARG="${{ github.event.inputs.date_override }}"
           UPLOAD_FLAG=""

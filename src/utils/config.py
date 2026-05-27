@@ -31,6 +31,7 @@ class Settings(BaseSettings):
 
     # 파이프라인 설정
     MAX_TICKERS: int = Field(default=0, ge=0)
+    MARKETS: str = "KOSPI,KOSDAQ"
     LOG_LEVEL: str = "INFO"
     DB_PATH: str = "/tmp/valueforge.db"
 
