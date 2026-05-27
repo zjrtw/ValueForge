@@ -52,6 +52,63 @@ def load_rankings(
 
 
 @st.cache_data(ttl=1800)
+def load_rankings_skip_stage1(
+    market: str | None = None,
+    min_score: float = 0.0,
+) -> pd.DataFrame:
+    """Stage1 필터를 무시하고 모든 점수를 반환한다 (테스트용).
+
+    Args:
+        market:    'KOSPI' | 'KOSDAQ' | None(전체).
+        min_score: composite_score 하한값 (0–100).
+    """
+    conn = get_db_connection()
+    latest_run_date = conn.execute(
+        "SELECT MAX(run_date) FROM pipeline_runs WHERE status = 'SUCCESS'"
+    ).fetchone()[0]
+
+    if not latest_run_date:
+        return pd.DataFrame()
+
+    query = """
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY sc.composite_score DESC) as rank,
+            sc.stock_code,
+            st.stock_name,
+            st.market,
+            st.sector,
+            sc.composite_score,
+            sc.value_score,
+            sc.quality_score,
+            sc.safety_score,
+            sc.growth_score,
+            sc.momentum_score,
+            sc.stage1_pass,
+            pr.market_cap_b,
+            pr.per,
+            pr.pbr,
+            pr.roe,
+            pr.dividend_yield,
+            pr.debt_to_equity,
+            pr.risk_flag_count,
+            pr.highest_severity,
+            sc.run_date,
+            st.listing_date
+        FROM scores sc
+        JOIN stocks st ON sc.stock_code = st.stock_code
+        LEFT JOIN rankings pr ON sc.stock_code = pr.stock_code AND sc.run_date = pr.run_date
+        WHERE sc.run_date = ?
+          AND sc.composite_score >= ?
+    """
+    params: list = [latest_run_date, min_score]
+    if market:
+        query += " AND st.market = ?"
+        params.append(market)
+    query += " ORDER BY sc.composite_score DESC"
+    return pd.read_sql_query(query, conn, params=params)
+
+
+@st.cache_data(ttl=1800)
 def load_stock_detail(stock_code: str) -> dict[str, pd.DataFrame]:
     """종목 상세 데이터를 scores / flags / fundamentals / prices 딕셔너리로 반환한다."""
     conn = get_db_connection()
@@ -93,3 +150,36 @@ def get_latest_run_date(conn: sqlite3.Connection) -> str | None:
         "SELECT MAX(run_date) FROM pipeline_runs WHERE status = 'SUCCESS'"
     ).fetchone()
     return row[0] if row else None
+
+
+@st.cache_data(ttl=300)
+def load_pipeline_stats() -> dict:
+    """최신 파이프라인 실행 통계를 반환한다."""
+    conn = get_db_connection()
+    row = conn.execute(
+        """
+        SELECT
+            run_date,
+            started_at,
+            completed_at,
+            status,
+            duration_seconds,
+            stocks_collected,
+            stocks_with_data,
+            collection_errors,
+            stage1_pass_count,
+            stage2_score_count,
+            stage3_trap_count,
+            final_candidates,
+            error_message
+        FROM pipeline_runs
+        WHERE status = 'SUCCESS'
+        ORDER BY run_date DESC
+        LIMIT 5
+        """
+    ).fetchall()
+
+    if not row:
+        return {}
+
+    return [dict(r) for r in row]
