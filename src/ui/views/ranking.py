@@ -4,7 +4,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.ui.data_loader import load_rankings
+from src.ui.data_loader import load_rankings, load_rankings_skip_stage1, load_pipeline_stats
 
 _SCORE_COLS = [
     "value_score",
@@ -35,6 +35,28 @@ _DISPLAY_COLS = [
     "highest_severity",
 ]
 
+_DISPLAY_COLS_SKIP_STAGE1 = [
+    "rank",
+    "stock_code",
+    "stock_name",
+    "market",
+    "sector",
+    "composite_score",
+    "stage1_pass",
+    "value_score",
+    "quality_score",
+    "safety_score",
+    "growth_score",
+    "momentum_score",
+    "market_cap_b",
+    "per",
+    "pbr",
+    "roe",
+    "dividend_yield",
+    "risk_flag_count",
+    "highest_severity",
+]
+
 _COL_LABELS = {
     "rank": "순위",
     "stock_code": "종목코드",
@@ -42,6 +64,7 @@ _COL_LABELS = {
     "market": "시장",
     "sector": "섹터",
     "composite_score": "종합점수",
+    "stage1_pass": "S1통과",
     "value_score": "가치",
     "quality_score": "품질",
     "safety_score": "안전",
@@ -130,13 +153,70 @@ def _severity_badge(severity: str | None) -> str:
     return colors.get(severity or "", "⚪")
 
 
+def _render_pipeline_stats() -> None:
+    """최신 파이프라인 실행 통계를 표시한다."""
+    stats_list = load_pipeline_stats()
+
+    if not stats_list:
+        st.info("파이프라인 실행 기록이 없습니다.")
+        return
+
+    latest = stats_list[0]
+
+    st.subheader(f"실행 날짜: {latest.get('run_date', '—')}")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("상태", latest.get("status", "—"))
+        st.metric("소요 시간", f"{latest.get('duration_seconds', 0) // 60}분")
+    with col2:
+        st.metric("시작", latest.get("started_at", "—").split("T")[1][:5] if latest.get("started_at") else "—")
+        st.metric("완료", latest.get("completed_at", "—").split("T")[1][:5] if latest.get("completed_at") else "—")
+
+    st.divider()
+    st.markdown("### 📊 수집 통계")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("수집 종목", f"{latest.get('stocks_collected', 0)}")
+    with col2:
+        st.metric("유효 데이터", f"{latest.get('stocks_with_data', 0)}")
+    with col3:
+        st.metric("수집 오류", f"{latest.get('collection_errors', 0)}")
+
+    st.divider()
+    st.markdown("### 🎯 스크리닝 결과")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Stage1 통과", f"{latest.get('stage1_pass_count', 0)}")
+    with col2:
+        st.metric("Stage2 점수", f"{latest.get('stage2_score_count', 0)}")
+    with col3:
+        st.metric("가치함정 감지", f"{latest.get('stage3_trap_count', 0)}")
+    with col4:
+        st.metric("최종 후보", f"{latest.get('final_candidates', 0)}", delta="추천 종목")
+
+    if latest.get("error_message"):
+        st.error(f"오류: {latest['error_message']}")
+
+
 def render() -> None:
     """랭킹 페이지를 렌더링한다."""
-    st.title("📊 종목 랭킹")
+    col_title, col_stats = st.columns([5, 1])
+    with col_title:
+        st.title("📊 종목 랭킹")
+    with col_stats:
+        with st.popover("📋 집계내용"):
+            _render_pipeline_stats()
 
     # ── 사이드바 필터 ────────────────────────────────────────────────────────
     with st.sidebar:
         st.header("필터")
+
+        skip_stage1 = st.checkbox(
+            "🧪 Stage1 필터 무시 (테스트 모드)",
+            value=False,
+            help="Stage1을 통과하지 않은 종목도 포함해서 보기. 임계값 테스트용.",
+        )
 
         market_opt = st.selectbox(
             "시장",
@@ -162,7 +242,10 @@ def render() -> None:
         )
 
     # ── 데이터 로드 ──────────────────────────────────────────────────────────
-    df_raw = load_rankings(market=market, min_score=float(min_score))
+    if skip_stage1:
+        df_raw = load_rankings_skip_stage1(market=market, min_score=float(min_score))
+    else:
+        df_raw = load_rankings(market=market, min_score=float(min_score))
 
     # 섹터 필터 (데이터 로드 후 옵션 구성)
     with st.sidebar:
@@ -171,6 +254,10 @@ def render() -> None:
         sector = None if sector_opt == "전체" else sector_opt
 
     df = apply_filters(df_raw, market=None, sector=sector, min_score=0.0, max_risk_flags=max_risk_flags)
+
+    # ── 테스트 모드 경고 ─────────────────────────────────────────────────────
+    if skip_stage1:
+        st.warning("🧪 **테스트 모드**: Stage1 필터가 무시되었습니다. Stage1을 통과하지 못한 종목도 포함되어 있습니다.")
 
     # ── 점수 지표 요약 ───────────────────────────────────────────────────────
     metrics = build_score_metrics(df)
@@ -189,8 +276,16 @@ def render() -> None:
         st.info("조건에 맞는 종목이 없습니다.")
         return
 
-    display_cols = [c for c in _DISPLAY_COLS if c in df.columns]
+    # 테스트 모드에서는 다른 컬럼 사용
+    cols_to_use = _DISPLAY_COLS_SKIP_STAGE1 if skip_stage1 else _DISPLAY_COLS
+    display_cols = [c for c in cols_to_use if c in df.columns]
     df_display = df[display_cols].copy()
+
+    # stage1_pass를 O/X로 표시
+    if "stage1_pass" in df_display.columns:
+        df_display["stage1_pass"] = df_display["stage1_pass"].apply(
+            lambda v: "✅" if v else "❌"
+        )
 
     # severity 배지 추가
     if "highest_severity" in df_display.columns:
