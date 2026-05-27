@@ -4,7 +4,12 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
-from src.ui.data_loader import load_rankings, load_rankings_skip_stage1, load_pipeline_stats
+from src.ui.data_loader import (
+    load_rankings,
+    load_rankings_skip_stage1,
+    load_pipeline_stats,
+    load_scores_with_filters,
+)
 
 _SCORE_COLS = [
     "value_score",
@@ -57,6 +62,29 @@ _DISPLAY_COLS_SKIP_STAGE1 = [
     "highest_severity",
 ]
 
+_DISPLAY_COLS_TEST_MODE = [
+    "rank",
+    "stock_code",
+    "stock_name",
+    "market",
+    "sector",
+    "composite_score",
+    "stage1_pass",
+    "is_value_trap",
+    "value_score",
+    "quality_score",
+    "safety_score",
+    "growth_score",
+    "momentum_score",
+    "market_cap_b",
+    "per",
+    "pbr",
+    "roe",
+    "dividend_yield",
+    "risk_flag_count",
+    "highest_severity",
+]
+
 _COL_LABELS = {
     "rank": "순위",
     "stock_code": "종목코드",
@@ -65,6 +93,7 @@ _COL_LABELS = {
     "sector": "섹터",
     "composite_score": "종합점수",
     "stage1_pass": "S1통과",
+    "is_value_trap": "가치함정",
     "value_score": "가치",
     "quality_score": "품질",
     "safety_score": "안전",
@@ -212,11 +241,31 @@ def render() -> None:
     with st.sidebar:
         st.header("필터")
 
-        skip_stage1 = st.checkbox(
-            "🧪 Stage1 필터 무시 (테스트 모드)",
+        test_mode = st.checkbox(
+            "🧪 필터 테스트 모드",
             value=False,
-            help="Stage1을 통과하지 않은 종목도 포함해서 보기. 임계값 테스트용.",
+            help="Stage별 필터를 개별 조정할 수 있습니다.",
         )
+
+        if test_mode:
+            st.divider()
+            st.subheader("Stage 필터")
+            stage1_enabled = st.checkbox("Stage1 통과 필수", value=True, key="s1")
+            stage3_exclude = st.checkbox("가치함정 제외", value=True, key="s3")
+            min_score_test = st.slider(
+                "최소 종합점수 (테스트)",
+                min_value=0,
+                max_value=100,
+                value=0,
+                step=1,
+            )
+        else:
+            stage1_enabled = True
+            stage3_exclude = True
+            min_score_test = 0.0
+
+        st.divider()
+        st.subheader("기본 필터")
 
         market_opt = st.selectbox(
             "시장",
@@ -242,8 +291,13 @@ def render() -> None:
         )
 
     # ── 데이터 로드 ──────────────────────────────────────────────────────────
-    if skip_stage1:
-        df_raw = load_rankings_skip_stage1(market=market, min_score=float(min_score))
+    if test_mode:
+        df_raw = load_scores_with_filters(
+            market=market,
+            min_score=float(min_score_test),
+            require_stage1=stage1_enabled,
+            exclude_value_trap=stage3_exclude,
+        )
     else:
         df_raw = load_rankings(market=market, min_score=float(min_score))
 
@@ -256,8 +310,14 @@ def render() -> None:
     df = apply_filters(df_raw, market=None, sector=sector, min_score=0.0, max_risk_flags=max_risk_flags)
 
     # ── 테스트 모드 경고 ─────────────────────────────────────────────────────
-    if skip_stage1:
-        st.warning("🧪 **테스트 모드**: Stage1 필터가 무시되었습니다. Stage1을 통과하지 못한 종목도 포함되어 있습니다.")
+    if test_mode:
+        cols = []
+        if not stage1_enabled:
+            cols.append("Stage1 비활성")
+        if not stage3_exclude:
+            cols.append("가치함정 포함")
+        msg = ", ".join(cols) if cols else "기본 설정"
+        st.warning(f"🧪 **필터 테스트 모드** | {msg}")
 
     # ── 점수 지표 요약 ───────────────────────────────────────────────────────
     metrics = build_score_metrics(df)
@@ -276,8 +336,12 @@ def render() -> None:
         st.info("조건에 맞는 종목이 없습니다.")
         return
 
-    # 테스트 모드에서는 다른 컬럼 사용
-    cols_to_use = _DISPLAY_COLS_SKIP_STAGE1 if skip_stage1 else _DISPLAY_COLS
+    # 모드에 따라 다른 컬럼 사용
+    if test_mode:
+        cols_to_use = _DISPLAY_COLS_TEST_MODE
+    else:
+        cols_to_use = _DISPLAY_COLS
+
     display_cols = [c for c in cols_to_use if c in df.columns]
     df_display = df[display_cols].copy()
 
@@ -285,6 +349,12 @@ def render() -> None:
     if "stage1_pass" in df_display.columns:
         df_display["stage1_pass"] = df_display["stage1_pass"].apply(
             lambda v: "✅" if v else "❌"
+        )
+
+    # is_value_trap를 O/X로 표시
+    if "is_value_trap" in df_display.columns:
+        df_display["is_value_trap"] = df_display["is_value_trap"].apply(
+            lambda v: "⚠️" if v else "—"
         )
 
     # severity 배지 추가
