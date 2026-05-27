@@ -35,13 +35,13 @@ jobs:
 
       - name: 파이프라인 실행
         env:
-          DART_API_KEY:         ${{ secrets.DART_API_KEY }}
-          R2_ENDPOINT_URL:      ${{ secrets.R2_ENDPOINT_URL }}
-          R2_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          R2_BUCKET_NAME:       ${{ secrets.R2_BUCKET_NAME }}
-          KRX_ID:               ${{ secrets.KRX_ID }}
-          KRX_PW:               ${{ secrets.KRX_PW }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+          KRX_ID: ${{ secrets.KRX_ID }}
+          KRX_PW: ${{ secrets.KRX_PW }}
         run: |
           DATE_ARG="${{ github.event.inputs.date_override }}"
           UPLOAD_FLAG=""

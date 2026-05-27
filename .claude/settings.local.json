@@ -30,7 +30,14 @@
       "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_retry.py C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_utils\\\\test_error_handling.py -v 2>&1 | Select-Object -Last 5)",
       "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_e2e.py -v 2>&1)",
       "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_pipeline\\\\test_e2e.py -v 2>&1 | Select-Object -Last 15)",
-      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_ui\\\\test_data_loader.py -v 2>&1)"
+      "PowerShell($env:PYTHONPATH = \"C:\\\\selfProject\\\\ValueForge\"; python -m pytest C:\\\\selfProject\\\\ValueForge\\\\tests\\\\test_ui\\\\test_data_loader.py -v 2>&1)",
+      "Bash(winget install *)",
+      "Bash(gh --version)",
+      "Bash(where gh *)",
+      "PowerShell(winget install --id GitHub.cli --accept-source-agreements --accept-package-agreements 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh auth status 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh auth login --web --hostname github.com 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh run list --limit 30 --json databaseId,name,status,conclusion,createdAt,workflowName 2>&1)"
     ]
   }
 }

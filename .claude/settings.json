@@ -8,7 +8,9 @@
       "Bash(python -c *)",
       "Bash(pip install *)",
       "Bash(grep -o *)",
-      "WebSearch(*)"
+      "WebSearch(*)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh repo view --json defaultBranchRef 2>&1)",
+      "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh workflow list --json id,name,state 2>&1)"
     ]
   }
 }
