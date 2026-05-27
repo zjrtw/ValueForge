@@ -21,6 +21,8 @@ _KOSDAQ_CODES = [
     "060900", "084365", "121600", "119610", "131970", "053200",
 ]
 
+_VALID_MARKETS = {"KOSPI", "KOSDAQ"}
+
 
 def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
     """KOSPI·KOSDAQ 전 종목 코드·종목명·시장을 DataFrame으로 반환.
@@ -34,12 +36,15 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
         columns: stock_code (str), stock_name (str), market (str)
     """
     rows: list[dict] = []
+    selected_markets = _selected_markets()
 
-    for code in _KOSPI_CODES:
-        rows.append({"stock_code": code, "stock_name": _get_stock_name(code), "market": "KOSPI"})
+    if "KOSPI" in selected_markets:
+        for code in _KOSPI_CODES:
+            rows.append({"stock_code": code, "stock_name": _get_stock_name(code), "market": "KOSPI"})
 
-    for code in _KOSDAQ_CODES:
-        rows.append({"stock_code": code, "stock_name": _get_stock_name(code), "market": "KOSDAQ"})
+    if "KOSDAQ" in selected_markets:
+        for code in _KOSDAQ_CODES:
+            rows.append({"stock_code": code, "stock_name": _get_stock_name(code), "market": "KOSDAQ"})
 
     df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market"])
 
@@ -47,8 +52,23 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
         df = df.head(settings.MAX_TICKERS)
         log.info("ticker count limited for testing", limit=settings.MAX_TICKERS)
 
-    log.info("ticker collection complete", total=len(df))
+    log.info("ticker collection complete", total=len(df), markets=",".join(selected_markets))
     return df
+
+
+def _selected_markets() -> list[str]:
+    """Return markets selected by MARKETS env setting."""
+    raw_markets = settings.MARKETS.strip()
+    if raw_markets.upper() in {"ALL", "BOTH"}:
+        return ["KOSPI", "KOSDAQ"]
+
+    markets = [market.strip().upper() for market in raw_markets.split(",") if market.strip()]
+    invalid = [market for market in markets if market not in _VALID_MARKETS]
+    if invalid or not markets:
+        valid_values = "KOSPI, KOSDAQ, KOSPI,KOSDAQ, ALL"
+        raise ValueError(f"Invalid MARKETS value: {settings.MARKETS}. Use one of: {valid_values}")
+
+    return list(dict.fromkeys(markets))
 
 
 def _get_stock_name(code: str) -> str:

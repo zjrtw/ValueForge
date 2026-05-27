@@ -1,6 +1,12 @@
-import pandas as pd
+import pytest
 
 from src.collectors.krx_tickers import fetch_ticker_list
+
+
+@pytest.fixture(autouse=True)
+def reset_ticker_settings(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MAX_TICKERS", 0)
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSPI,KOSDAQ")
 
 
 def test_fetch_ticker_list_returns_kospi_and_kosdaq_codes():
@@ -53,3 +59,41 @@ def test_fetch_ticker_list_with_max_tickers_zero_returns_all(monkeypatch):
     result = fetch_ticker_list()
 
     assert len(result) == 40
+
+
+def test_fetch_ticker_list_respects_kospi_market_setting(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSPI")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == 20
+    assert set(result["market"]) == {"KOSPI"}
+
+
+def test_fetch_ticker_list_respects_kosdaq_market_setting(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KOSDAQ")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == 20
+    assert set(result["market"]) == {"KOSDAQ"}
+
+
+def test_fetch_ticker_list_respects_all_market_setting(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "ALL")
+
+    result = fetch_ticker_list()
+
+    assert len(result) == 40
+    assert set(result["market"]) == {"KOSPI", "KOSDAQ"}
+
+
+def test_fetch_ticker_list_rejects_invalid_market_setting(monkeypatch):
+    monkeypatch.setattr("src.collectors.krx_tickers.settings.MARKETS", "KONEX")
+
+    try:
+        fetch_ticker_list()
+    except ValueError as exc:
+        assert "Invalid MARKETS value" in str(exc)
+    else:
+        raise AssertionError("Expected ValueError")

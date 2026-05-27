@@ -112,6 +112,29 @@ MAX_TICKERS=50       # 테스트
 
 ---
 
+### MARKETS
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | `KOSPI,KOSDAQ` |
+| 용도 | 파이프라인 실행 시장 범위 선택 |
+
+| 값 | 동작 |
+|---|---|
+| `KOSPI` | 코스피만 실행 |
+| `KOSDAQ` | 코스닥만 실행 |
+| `KOSPI,KOSDAQ` | 코스피와 코스닥 모두 실행 |
+| `ALL` | 코스피와 코스닥 모두 실행 |
+
+```bash
+MARKETS=KOSPI          # 코스피만
+MARKETS=KOSDAQ         # 코스닥만
+MARKETS=KOSPI,KOSDAQ   # 둘 다
+```
+
+---
+
 ### LOG_LEVEL
 
 | 항목 | 내용 |
