@@ -117,6 +117,54 @@ def normalize_financial_statement(
     return row
 
 
+def fetch_company_metadata(
+    tickers: pd.DataFrame | None = None,
+    *,
+    client: Any | None = None,
+) -> pd.DataFrame:
+    """DART company API에서 종목별 메타데이터를 수집한다.
+
+    반환 컬럼: stock_code, stock_name_en, industry
+
+    - industry: DART induty_code (표준산업분류코드, 예: '264').
+      KRX 섹터명과 다르며 추후 마이그레이션 시 별도 매핑 테이블로 변환 예정.
+    - listing_date: DART company API에 포함되지 않아 수집 불가.
+    """
+    dart = client if client is not None else _create_dart_client()
+    ticker_df = tickers if tickers is not None else fetch_ticker_list()
+    codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
+
+    if settings.MAX_TICKERS > 0:
+        codes = codes[: settings.MAX_TICKERS]
+
+    rows: list[dict[str, Any]] = []
+    for code in codes:
+        if not _quota_tracker.can_call(1):
+            log.info("dart daily quota exhausted, stopping company metadata fetch")
+            break
+        try:
+            info = dart.company(code)
+            _quota_tracker.add_calls(1)
+
+            if not isinstance(info, dict):
+                continue
+
+            induty_code = info.get("induty_code")
+            corp_name_eng = info.get("corp_name_eng")
+
+            if induty_code or corp_name_eng:
+                rows.append({
+                    "stock_code": code,
+                    "stock_name_en": corp_name_eng or None,
+                    "industry": induty_code or None,
+                })
+        except Exception as exc:
+            log.warning("dart company info fetch failed", stock_code=code, error=str(exc))
+
+    log.info("dart company metadata collection complete", total=len(rows))
+    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "industry"])
+
+
 def _create_dart_client() -> Any:
     if not settings.DART_API_KEY:
         raise RuntimeError("DART_API_KEY is not configured")

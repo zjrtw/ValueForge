@@ -38,11 +38,6 @@ _PRICES = pd.DataFrame([
      "market_cap": 4e9, "per": 10.0, "pbr": 1.2, "dividend_yield": 1.5},
 ])
 
-_AVG_VOL = pd.DataFrame([
-    {"stock_code": "005930", "avg_trading_value_20d": 1e9},
-    {"stock_code": "000660", "avg_trading_value_20d": 8e8},
-])
-
 _FUNDAMENTALS = pd.DataFrame([
     {"stock_code": "005930", "fiscal_year": 2024, "fiscal_quarter": 0,
      "revenue": 300e6, "operating_profit": 30e6, "total_equity": 50e6,
@@ -88,9 +83,10 @@ def _patch_collectors():
     """수집기 의존성 패치 컨텍스트 관리자."""
     patches = [
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_TICKERS),
+        patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_PRICES),
-        patch("src.pipeline.runner.fetch_avg_trading_value_20d", return_value=_AVG_VOL),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_FUNDAMENTALS),
+        patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.R2Uploader"),
     ]
     return patches

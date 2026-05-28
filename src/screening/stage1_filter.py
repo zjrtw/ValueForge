@@ -23,7 +23,7 @@ def stage1_filter(
         & (per > stage1.get("min_per", 0.0))
         & (per <= stage1.get("max_per", float("inf")))
         & (pbr <= stage1.get("max_pbr", float("inf")))
-        & (listing_days >= stage1.get("min_listed_days", 0))
+        & (listing_days.isna() | (listing_days >= stage1.get("min_listed_days", 0)))
         & (is_active == 1)
         & per.notna()
         & pbr.notna()

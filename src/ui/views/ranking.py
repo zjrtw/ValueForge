@@ -5,9 +5,8 @@ import pandas as pd
 import streamlit as st
 
 from src.ui.data_loader import (
-    load_rankings,
-    load_rankings_skip_stage1,
     load_pipeline_stats,
+    load_rankings,
     load_scores_with_filters,
 )
 
@@ -233,9 +232,8 @@ def render() -> None:
     col_title, col_stats = st.columns([5, 1])
     with col_title:
         st.title("📊 종목 랭킹")
-    with col_stats:
-        with st.popover("📋 집계내용"):
-            _render_pipeline_stats()
+    with col_stats, st.popover("📋 집계내용"):
+        _render_pipeline_stats()
 
     # ── 사이드바 필터 ────────────────────────────────────────────────────────
     with st.sidebar:
@@ -262,7 +260,7 @@ def render() -> None:
         else:
             stage1_enabled = True
             stage3_exclude = True
-            min_score_test = 0.0
+            min_score_test = 0
 
         st.divider()
         st.subheader("기본 필터")
@@ -336,11 +334,7 @@ def render() -> None:
         st.info("조건에 맞는 종목이 없습니다.")
         return
 
-    # 모드에 따라 다른 컬럼 사용
-    if test_mode:
-        cols_to_use = _DISPLAY_COLS_TEST_MODE
-    else:
-        cols_to_use = _DISPLAY_COLS
+    cols_to_use = _DISPLAY_COLS_TEST_MODE if test_mode else _DISPLAY_COLS
 
     display_cols = [c for c in cols_to_use if c in df.columns]
     df_display = df[display_cols].copy()

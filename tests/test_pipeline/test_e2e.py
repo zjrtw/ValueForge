@@ -76,15 +76,6 @@ def _prices() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def _avg_vol() -> pd.DataFrame:
-    rows = []
-    for c in _GOOD_CODES + _TRAP_CODES:
-        rows.append({"stock_code": c, "avg_trading_value_20d": 1_000_000_000})  # 10억 → 통과
-    for c in _FAIL_CODES:
-        rows.append({"stock_code": c, "avg_trading_value_20d": 10_000_000})     # 1천만 → 실패
-    return pd.DataFrame(rows)
-
-
 def _base_fundamental(code: str, year: int, **overrides) -> dict:
     base = {
         "stock_code": code, "fiscal_year": year, "fiscal_quarter": 0,
@@ -135,9 +126,10 @@ def _run_pipeline_no_upload(db_path: Path) -> dict:
     """외부 API를 모킹하고 upload=False로 파이프라인을 실행한다."""
     with (
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
+        patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
-        patch("src.pipeline.runner.fetch_avg_trading_value_20d", return_value=_avg_vol()),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
+        patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
     ):
         return run_pipeline(_RUN_DATE, db_path=db_path, upload=False)
 
@@ -392,9 +384,10 @@ class E2EWithUploadTest(unittest.TestCase):
 
         with (
             patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
+            patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
             patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
-            patch("src.pipeline.runner.fetch_avg_trading_value_20d", return_value=_avg_vol()),
             patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
+            patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
             patch("src.pipeline.runner.R2Uploader", side_effect=_get_mocked_uploader),
         ):
             return run_pipeline(_RUN_DATE, db_path=self._db_path, upload=True)

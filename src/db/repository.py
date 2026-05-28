@@ -140,12 +140,12 @@ class Repository:
             )
             ON CONFLICT(stock_code) DO UPDATE SET
                 stock_name = excluded.stock_name,
-                stock_name_en = excluded.stock_name_en,
+                stock_name_en = COALESCE(excluded.stock_name_en, stocks.stock_name_en),
                 market = excluded.market,
-                sector = excluded.sector,
-                industry = excluded.industry,
-                listing_date = excluded.listing_date,
-                shares_outstanding = excluded.shares_outstanding,
+                sector = COALESCE(excluded.sector, stocks.sector),
+                industry = COALESCE(excluded.industry, stocks.industry),
+                listing_date = COALESCE(excluded.listing_date, stocks.listing_date),
+                shares_outstanding = COALESCE(excluded.shares_outstanding, stocks.shares_outstanding),
                 is_active = excluded.is_active,
                 updated_at = datetime('now')
             """,
@@ -153,6 +153,40 @@ class Repository:
         )
         self.conn.commit()
         return len(records)
+
+    def update_stock_metadata(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
+        """기존 stocks 행의 메타데이터(listing_date, industry)만 UPDATE한다.
+
+        INSERT를 시도하지 않으므로 stock_name NOT NULL 제약과 충돌하지 않는다.
+        """
+        raw_records = rows.to_dict("records") if isinstance(rows, pd.DataFrame) else list(rows)
+        if not raw_records:
+            return 0
+
+        params = [
+            (
+                _clean_value(r.get("stock_name_en")),
+                _clean_value(r.get("industry")),
+                _clean_value(r.get("listing_date")),
+                _clean_value(r.get("shares_outstanding")),
+                str(r["stock_code"]).zfill(6),
+            )
+            for r in raw_records
+        ]
+        self.conn.executemany(
+            """
+            UPDATE stocks SET
+                stock_name_en     = COALESCE(?, stock_name_en),
+                industry          = COALESCE(?, industry),
+                listing_date      = COALESCE(?, listing_date),
+                shares_outstanding = COALESCE(?, shares_outstanding),
+                updated_at        = datetime('now')
+            WHERE stock_code = ?
+            """,
+            params,
+        )
+        self.conn.commit()
+        return len(params)
 
     def upsert_prices(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
         records = _records(rows, PRICE_COLUMNS)
@@ -263,7 +297,22 @@ class Repository:
             price_date_filter = "WHERE date <= :run_date"
 
         query = f"""
-            WITH latest_prices AS (
+            WITH avg_trading_value AS (
+                SELECT
+                    stock_code,
+                    AVG(close * volume) AS avg_trading_value_20d
+                FROM (
+                    SELECT
+                        stock_code, close, volume,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY stock_code ORDER BY date DESC
+                        ) AS rn
+                    FROM prices
+                )
+                WHERE rn <= 20
+                GROUP BY stock_code
+            ),
+            latest_prices AS (
                 SELECT *
                 FROM (
                     SELECT
@@ -305,6 +354,7 @@ class Repository:
                     WHEN s.listing_date IS NULL THEN NULL
                     ELSE CAST(julianday(COALESCE(:run_date, lp.date, date('now'))) - julianday(s.listing_date) AS INTEGER)
                 END AS listing_days,
+                av.avg_trading_value_20d,
                 lp.date AS price_date,
                 lp.open,
                 lp.high,
@@ -345,6 +395,7 @@ class Repository:
                 lf.interest_coverage,
                 lf.data_source
             FROM stocks s
+            LEFT JOIN avg_trading_value av ON av.stock_code = s.stock_code
             LEFT JOIN latest_prices lp ON lp.stock_code = s.stock_code
             LEFT JOIN latest_fundamentals lf ON lf.stock_code = s.stock_code
             WHERE s.is_active = 1

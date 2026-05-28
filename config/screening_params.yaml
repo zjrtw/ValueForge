@@ -6,7 +6,7 @@ stage1:
   max_per: 50.0                     # 최대 PER (음수 PER 종목 제외)
   min_per: 0.0
   max_pbr: 10.0                     # 최대 PBR
-  min_listed_days: 365              # 최소 상장 기간 (일)
+  min_listed_days: 180              # 최소 상장 기간 (일) — return_6m 계산 기준
 
 # Stage 2 스코어 가중치 (합계 = 1.0)
 stage2_weights:
