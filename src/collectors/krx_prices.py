@@ -64,7 +64,11 @@ def fetch_daily_price_data(
         [
             "stock_code",
             "date",
+            "open",
+            "high",
+            "low",
             "close",
+            "volume",
             "trading_value",
             "market_cap",
             "per",
@@ -174,14 +178,18 @@ def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
     fundamentals = _with_stock_code_index(fundamentals)
 
     merged = (
-        ohlcv[["stock_code", "종가", "거래대금"]]
+        ohlcv[["stock_code", "시가", "고가", "저가", "종가", "거래량", "거래대금"]]
         .merge(caps[["stock_code", "시가총액"]], on="stock_code", how="left")
         .merge(fundamentals[["stock_code", "PER", "PBR", "DIV"]], on="stock_code", how="left")
     )
     merged["market"] = market
     merged = merged.rename(
         columns={
+            "시가": "open",
+            "고가": "high",
+            "저가": "low",
             "종가": "close",
+            "거래량": "volume",
             "거래대금": "trading_value",
             "시가총액": "market_cap",
             "PER": "per",
@@ -190,7 +198,7 @@ def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
         }
     )
 
-    for column in ["close", "trading_value", "market_cap", "per", "pbr", "dividend_yield"]:
+    for column in ["open", "high", "low", "close", "volume", "trading_value", "market_cap", "per", "pbr", "dividend_yield"]:
         merged[column] = pd.to_numeric(merged[column], errors="coerce")
 
     return merged

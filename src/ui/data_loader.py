@@ -6,6 +6,7 @@ Streamlit Cloud에서 무거운 연산을 하지 않는다.
 from __future__ import annotations
 
 import sqlite3
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -15,8 +16,10 @@ from src.storage.downloader import download_latest_db, get_metadata
 
 @st.cache_resource(ttl=1800)
 def get_db_connection() -> sqlite3.Connection:
-    """R2에서 latest.db를 30분마다 1회 다운로드 후 읽기 전용 연결을 반환한다."""
-    db_path = download_latest_db()
+    """로컬 DB 우선, 없으면 R2에서 다운로드 후 읽기 전용 연결을 반환한다."""
+    local_db = Path.cwd() / ".local" / "valueforge_latest.db"
+    db_path = str(local_db) if local_db.exists() else str(download_latest_db())
+
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
@@ -48,6 +51,76 @@ def load_rankings(
         query += " AND r.market = ?"
         params.append(market)
     query += " ORDER BY r.rank ASC"
+    return pd.read_sql_query(query, conn, params=params)
+
+
+@st.cache_data(ttl=1800)
+def load_scores_with_filters(
+    market: str | None = None,
+    min_score: float = 0.0,
+    require_stage1: bool = True,
+    exclude_value_trap: bool = True,
+) -> pd.DataFrame:
+    """scores 테이블에서 필터링된 데이터를 반환한다 (테스트용).
+
+    Args:
+        market: 'KOSPI' | 'KOSDAQ' | None(전체).
+        min_score: composite_score 하한값.
+        require_stage1: Stage1 통과 필수 여부.
+        exclude_value_trap: 가치함정 제외 여부.
+    """
+    conn = get_db_connection()
+    latest_run_date = conn.execute(
+        "SELECT MAX(run_date) FROM pipeline_runs WHERE status = 'SUCCESS'"
+    ).fetchone()[0]
+
+    if not latest_run_date:
+        return pd.DataFrame()
+
+    query = """
+        SELECT
+            ROW_NUMBER() OVER (ORDER BY sc.composite_score DESC) as rank,
+            sc.stock_code,
+            st.stock_name,
+            st.market,
+            st.sector,
+            sc.composite_score,
+            sc.value_score,
+            sc.quality_score,
+            sc.safety_score,
+            sc.growth_score,
+            sc.momentum_score,
+            sc.stage1_pass,
+            sc.is_value_trap,
+            pr.market_cap_b,
+            pr.per,
+            pr.pbr,
+            pr.roe,
+            pr.dividend_yield,
+            pr.debt_to_equity,
+            pr.risk_flag_count,
+            pr.highest_severity,
+            sc.run_date,
+            st.listing_date
+        FROM scores sc
+        JOIN stocks st ON sc.stock_code = st.stock_code
+        LEFT JOIN rankings pr ON sc.stock_code = pr.stock_code AND sc.run_date = pr.run_date
+        WHERE sc.run_date = ?
+          AND sc.composite_score >= ?
+    """
+    params: list = [latest_run_date, min_score]
+
+    if require_stage1:
+        query += " AND sc.stage1_pass = 1"
+
+    if exclude_value_trap:
+        query += " AND sc.is_value_trap = 0"
+
+    if market:
+        query += " AND st.market = ?"
+        params.append(market)
+
+    query += " ORDER BY sc.composite_score DESC"
     return pd.read_sql_query(query, conn, params=params)
 
 
@@ -153,7 +226,7 @@ def get_latest_run_date(conn: sqlite3.Connection) -> str | None:
 
 
 @st.cache_data(ttl=300)
-def load_pipeline_stats() -> dict:
+def load_pipeline_stats() -> list[dict]:
     """최신 파이프라인 실행 통계를 반환한다."""
     conn = get_db_connection()
     row = conn.execute(
@@ -180,6 +253,6 @@ def load_pipeline_stats() -> dict:
     ).fetchall()
 
     if not row:
-        return {}
+        return []
 
     return [dict(r) for r in row]

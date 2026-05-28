@@ -5,15 +5,12 @@ cd /d "%~dp0"
 
 if not exist ".venv\Scripts\python.exe" (
     echo [ERROR] .venv\Scripts\python.exe not found.
-    echo Create the virtual environment first:
-    echo python -m venv .venv
-    echo .venv\Scripts\python.exe -m pip install -r requirements.txt
+    echo Run: python -m venv .venv ^&^& .venv\Scripts\python.exe -m pip install -r requirements.txt
     exit /b 1
 )
 
 if not exist ".env" (
-    echo [ERROR] .env file not found.
-    echo Copy .env.example to .env and fill in the required values.
+    echo [ERROR] .env file not found. Copy .env.example to .env and fill in values.
     exit /b 1
 )
 
@@ -25,15 +22,35 @@ if errorlevel 1 (
 
 if "%LOG_LEVEL%"=="" set "LOG_LEVEL=INFO"
 
-set "PIPELINE_ARGS=%*"
 set "UPLOAD_FLAG=--no-upload"
+set "RUN_TESTS=0"
+set "PIPELINE_ARGS="
+
+:arg_loop
+if "%~1"=="" goto arg_done
 if /i "%~1"=="--upload" (
     set "UPLOAD_FLAG="
     shift
-    set "PIPELINE_ARGS=%*"
+    goto arg_loop
+)
+if /i "%~1"=="-t" (
+    set "RUN_TESTS=1"
+    shift
+    goto arg_loop
+)
+set "PIPELINE_ARGS=%PIPELINE_ARGS% %~1"
+shift
+goto arg_loop
+:arg_done
+
+set "DB_PATH_FLAG="
+if not "%UPLOAD_FLAG%"=="" (
+    echo %PIPELINE_ARGS% | findstr /i "\-\-db-path" >nul || (
+        if not exist "data" mkdir data
+        set "DB_PATH_FLAG=--db-path data\valueforge_local.db"
+    )
 )
 
-rem Avoid stale local proxy settings such as 127.0.0.1:9 blocking KRX/DART calls.
 set "HTTP_PROXY="
 set "HTTPS_PROXY="
 set "http_proxy="
@@ -42,7 +59,18 @@ set "ALL_PROXY="
 set "all_proxy="
 set "NO_PROXY=data.krx.co.kr,opendart.fss.or.kr,localhost,127.0.0.1"
 
-python -m src.pipeline.runner %PIPELINE_ARGS% %UPLOAD_FLAG%
+if "%RUN_TESTS%"=="1" (
+    echo.
+    echo [TEST] Running tests...
+    pytest tests/ -v
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Tests failed. Pipeline execution aborted.
+        exit /b 1
+    )
+)
+
+python -m src.pipeline.runner %PIPELINE_ARGS% %UPLOAD_FLAG% %DB_PATH_FLAG%
 set "EXIT_CODE=%ERRORLEVEL%"
 
 if not "%EXIT_CODE%"=="0" (
@@ -53,4 +81,7 @@ if not "%EXIT_CODE%"=="0" (
 
 echo.
 echo [OK] Pipeline completed successfully.
+if not "%DB_PATH_FLAG%"=="" (
+    echo [DB]  data\valueforge_local.db
+)
 exit /b 0

@@ -132,9 +132,10 @@ class RunnerThresholdIntegrationTest(unittest.TestCase):
 
             patches = [
                 patch.object(runner, "fetch_ticker_list", return_value=tickers),
+                patch.object(runner, "fetch_stock_listing_info", return_value=pd.DataFrame()),
                 patch.object(runner, "fetch_daily_price_data", return_value=prices),
-                patch.object(runner, "fetch_avg_trading_value_20d", return_value=pd.DataFrame()),
                 patch.object(runner, "fetch_financial_statements", return_value=pd.DataFrame()),
+                patch.object(runner, "fetch_company_metadata", return_value=pd.DataFrame()),
                 patch.object(runner, "R2Uploader"),
             ]
             for p in patches:

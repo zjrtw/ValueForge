@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_financial_statements
-from src.collectors.krx_prices import fetch_avg_trading_value_20d, fetch_daily_price_data
-from src.collectors.krx_tickers import fetch_ticker_list
+from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
+from src.collectors.krx_prices import fetch_daily_price_data
+from src.collectors.krx_tickers import fetch_stock_listing_info, fetch_ticker_list
 from src.db.repository import Repository
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
@@ -67,7 +67,7 @@ def run_pipeline(
         log.info("pipeline_start", run_date=run_date.isoformat())
 
         # ── Phase 1: 수집 ──────────────────────────────────────────────────
-        tickers, avg_vol, n_collected, n_errors = _collect(repo, run_date)
+        tickers, n_collected, n_errors = _collect(repo, run_date)
         stats.update(
             stocks_collected=n_collected,
             stocks_with_data=n_collected - n_errors,
@@ -76,7 +76,7 @@ def run_pipeline(
         check_collection_threshold(n_collected - n_errors, n_collected)
 
         # ── Phase 2: 스크리닝 ───────────────────────────────────────────────
-        stage3_all, ranked = _screen(repo, run_date, avg_vol)
+        stage3_all, ranked = _screen(repo, run_date)
         stats.update(
             stage1_pass_count=len(stage3_all),
             stage2_score_count=len(stage3_all),
@@ -129,13 +129,22 @@ def run_pipeline(
 def _collect(
     repo: Repository,
     run_date: date,
-) -> tuple[pd.DataFrame, pd.DataFrame, int, int]:
-    """수집 단계: tickers → prices → avg_vol → fundamentals."""
+) -> tuple[pd.DataFrame, int, int]:
+    """수집 단계: tickers → prices → fundamentals."""
     # 1. 종목 코드
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
     repo.upsert_stocks(tickers)
     log.info("collect_tickers_done", count=len(tickers))
+
+    # 1-1. KRX 종목기본정보 — listing_date, shares_outstanding 보강
+    log.info("collect_listing_info_start")
+    listing_info = fetch_stock_listing_info()
+    if not listing_info.empty:
+        repo.update_stock_metadata(listing_info)
+        log.info("collect_listing_info_done", count=len(listing_info))
+    else:
+        log.warning("collect_listing_info_empty")
 
     # 2. 일별 주가
     log.info("collect_prices_start")
@@ -149,12 +158,7 @@ def _collect(
         log.warning("collect_prices_empty")
         n_errors = n_collected
 
-    # 3. 20일 평균 거래대금 (DB에 저장 안 함 — 스크리닝 시 병합)
-    log.info("collect_avg_volume_start")
-    avg_vol = fetch_avg_trading_value_20d(run_date, tickers)
-    log.info("collect_avg_volume_done", count=len(avg_vol))
-
-    # 4. DART 재무 데이터
+    # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers)
     if not fundamentals.empty:
@@ -163,29 +167,25 @@ def _collect(
     else:
         log.warning("collect_fundamentals_empty")
 
-    return tickers, avg_vol, n_collected, n_errors
+    # 5. DART 회사 메타데이터 (listing_date, industry) — stocks 테이블 보강
+    log.info("collect_company_metadata_start")
+    company_meta = fetch_company_metadata(tickers)
+    if not company_meta.empty:
+        repo.update_stock_metadata(company_meta)
+        log.info("collect_company_metadata_done", count=len(company_meta))
+    else:
+        log.warning("collect_company_metadata_empty")
+
+    return tickers, n_collected, n_errors
 
 
 def _screen(
     repo: Repository,
     run_date: date,
-    avg_vol: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """스크리닝 단계: Stage 1 → 2 → 3 → 4."""
     dataset = repo.get_screening_dataset(run_date)
     log.info("screen_dataset_loaded", rows=len(dataset))
-
-    # avg_trading_value_20d 병합 (Stage 1 필터 조건, 아직 없을 때만)
-    if (
-        not avg_vol.empty
-        and "avg_trading_value_20d" in avg_vol.columns
-        and "avg_trading_value_20d" not in dataset.columns
-    ):
-        dataset = dataset.merge(
-            avg_vol[["stock_code", "avg_trading_value_20d"]],
-            on="stock_code",
-            how="left",
-        )
 
     # 다년도 재무 컬럼 추가 (Stage 3 함정 감지용)
     dataset = _enrich_multiyear(dataset, repo.conn)
@@ -405,6 +405,11 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="R2 업로드를 건너뛴다 (로컬 테스트용)",
     )
+    parser.add_argument(
+        "--db-path",
+        default=None,
+        help="DB 파일 저장 경로 (지정 시 파이프라인 종료 후 파일 유지)",
+    )
     return parser.parse_args()
 
 
@@ -417,13 +422,14 @@ def main() -> None:
     args = _parse_args()
     run_date = _resolve_date(args.date)
     upload = not args.no_upload
+    db_path = Path(args.db_path) if args.db_path else None
 
     if not is_trading_day(run_date):
         log.info("pipeline_skipped_non_trading_day", run_date=run_date.isoformat())
         sys.exit(0)
 
     try:
-        stats = run_pipeline(run_date, upload=upload)
+        stats = run_pipeline(run_date, upload=upload, db_path=db_path)
         log.info("pipeline_complete", **stats)
         sys.exit(0)
     except Exception as exc:

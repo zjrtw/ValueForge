@@ -2,6 +2,7 @@
 
 pykrx API를 모킹하여 실제 네트워크 호출 없이 동작을 검증한다.
 """
+import pandas as pd
 import pytest
 
 from src.collectors.krx_tickers import fetch_ticker_list
@@ -36,6 +37,10 @@ def _patch_pykrx(monkeypatch):
     monkeypatch.setattr("src.collectors.krx_tickers.stock.get_market_ticker_list", fake_ticker_list)
     monkeypatch.setattr("src.collectors.krx_tickers.stock.get_market_ticker_name", fake_ticker_name)
     monkeypatch.setattr("src.collectors.krx_tickers._rate_limiter.wait", lambda: None)
+    monkeypatch.setattr(
+        "src.collectors.krx_tickers.fetch_stock_listing_info",
+        lambda: pd.DataFrame(columns=["stock_code", "listing_date", "shares_outstanding"]),
+    )
 
 
 def test_fetch_ticker_list_returns_kospi_and_kosdaq_codes(monkeypatch):
@@ -44,7 +49,7 @@ def test_fetch_ticker_list_returns_kospi_and_kosdaq_codes(monkeypatch):
     result = fetch_ticker_list()
 
     assert not result.empty
-    assert list(result.columns) == ["stock_code", "stock_name", "market"]
+    assert list(result.columns) == ["stock_code", "stock_name", "market", "shares_outstanding"]
 
     kospi = result[result["market"] == "KOSPI"]
     kosdaq = result[result["market"] == "KOSDAQ"]
