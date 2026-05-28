@@ -19,11 +19,25 @@ def test_fetch_daily_price_data_merges_krx_market_frames(mocker):
     def fake_ohlcv(_date, market):
         if market == "KOSPI":
             return pd.DataFrame(
-                {"종가": [70000, 120000], "거래대금": [100_000_000, 200_000_000]},
+                {
+                    "시가": [69000, 119000],
+                    "고가": [71000, 121000],
+                    "저가": [68000, 118000],
+                    "종가": [70000, 120000],
+                    "거래량": [1_000_000, 2_000_000],
+                    "거래대금": [100_000_000, 200_000_000],
+                },
                 index=["005930", "000660"],
             )
         return pd.DataFrame(
-            {"종가": [80000], "거래대금": [300_000_000]},
+            {
+                "시가": [79000],
+                "고가": [81000],
+                "저가": [78000],
+                "종가": [80000],
+                "거래량": [500_000],
+                "거래대금": [300_000_000],
+            },
             index=["091990"],
         )
 
@@ -49,7 +63,11 @@ def test_fetch_daily_price_data_merges_krx_market_frames(mocker):
     assert list(result.columns) == [
         "stock_code",
         "date",
+        "open",
+        "high",
+        "low",
         "close",
+        "volume",
         "trading_value",
         "market_cap",
         "per",
@@ -60,6 +78,7 @@ def test_fetch_daily_price_data_merges_krx_market_frames(mocker):
     assert len(result) == 3
     assert result.loc[result["stock_code"] == "005930", "date"].item() == "2026-05-20"
     assert result.loc[result["stock_code"] == "005930", "close"].item() == 70000
+    assert result.loc[result["stock_code"] == "005930", "volume"].item() == 1_000_000
     assert result.loc[result["stock_code"] == "000660", "market_cap"].item() == 80_000_000_000_000
     assert result.loc[result["stock_code"] == "091990", "dividend_yield"].item() == 0.0
 

@@ -21,35 +21,7 @@ if not exist "%PROJECT_DIR%\.local" (
 )
 
 echo [Download] Downloading from R2...
-python << PYTHON_EOF
-import sys
-import os
-from pathlib import Path
-
-sys.path.insert(0, r'%PROJECT_DIR%')
-
-try:
-    from src.storage.r2_client import R2Client
-
-    client = R2Client()
-    temp_path = r'%TEMP_DB%'
-
-    if os.path.exists(temp_path):
-        os.remove(temp_path)
-
-    client._client.download_file(
-        "valueforge-backups",
-        "latest.db",
-        temp_path
-    )
-
-    print(f"OK - Downloaded: {temp_path}")
-
-except Exception as e:
-    print(f"ERROR - {e}")
-    sys.exit(1)
-
-PYTHON_EOF
+python -c "import sys, os; from pathlib import Path; sys.path.insert(0, os.environ['PROJECT_DIR']); from src.storage.downloader import download_latest_db; p=Path(os.environ['TEMP_DB']); p.unlink(missing_ok=True); download_latest_db(dest=p); print('OK - Downloaded:', p)"
 
 if errorlevel 1 (
     echo [ERROR] Download failed
@@ -58,34 +30,7 @@ if errorlevel 1 (
 
 echo.
 echo [Verify] Checking database...
-python << PYTHON_EOF
-import sqlite3
-import sys
-
-try:
-    conn = sqlite3.connect(r'%TEMP_DB%')
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT COUNT(*) FROM scores")
-    scores_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT COUNT(*) FROM rankings")
-    rankings_count = cursor.fetchone()[0]
-
-    cursor.execute("SELECT MAX(run_date) FROM pipeline_runs WHERE status = 'SUCCESS'")
-    latest_run = cursor.fetchone()[0]
-
-    conn.close()
-
-    print(f"Scores: {scores_count}")
-    print(f"Rankings: {rankings_count}")
-    print(f"Latest: {latest_run}")
-
-except Exception as e:
-    print(f"ERROR - {e}")
-    sys.exit(1)
-
-PYTHON_EOF
+python -c "import sqlite3, os; conn = sqlite3.connect(os.environ['TEMP_DB']); c = conn.cursor(); print('Scores:', c.execute('SELECT COUNT(*) FROM scores').fetchone()[0]); print('Rankings:', c.execute('SELECT COUNT(*) FROM rankings').fetchone()[0]); print('Latest:', c.execute('SELECT MAX(run_date) FROM pipeline_runs WHERE status=?', ('SUCCESS',)).fetchone()[0]); conn.close()"
 
 if errorlevel 1 (
     echo [ERROR] Verify failed
