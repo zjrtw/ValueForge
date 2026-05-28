@@ -38,10 +38,13 @@
       "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh auth status 2>&1)",
       "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh auth login --web --hostname github.com 2>&1)",
       "PowerShell($env:PATH = [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"Machine\"\\) + \";\" + [System.Environment]::GetEnvironmentVariable\\(\"PATH\",\"User\"\\); gh run list --limit 30 --json databaseId,name,status,conclusion,createdAt,workflowName 2>&1)",
-      "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(gh pr create --title 'feat: 데이터 수집 확장 — OHLCV, 상장정보, DART 메타데이터' --base main --body ' *)",
-      "Bash(mypy src/ --ignore-missing-imports)"
+      "Bash(gh pr create --title 'feat: GitHub Actions 성능 최적화 \\(M6-1-1~M6-1-3\\)' --body ' *)",
+      "Bash(git commit -m 'chore: daily_pipeline timeout 120분 → 360분 \\(안정성 테스트용\\) *)",
+      "Bash(git fetch *)",
+      "Bash(gh pr *)",
+      "Bash(gh run *)",
+      "Bash(git commit -m 'fix: GitHub Actions 테스트 실패 문제 해결 *)"
     ]
   }
 }
