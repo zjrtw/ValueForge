@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 
 from src.collectors.krx_tickers import fetch_ticker_list
+from src.utils.concurrent import parallel_map
 from src.utils.config import settings
 from src.utils.logger import get_logger
 from src.utils.rate_limiter import DailyQuotaTracker
@@ -55,28 +56,28 @@ def fetch_financial_statements(
     target_year = base_year if base_year is not None else date.today().year - 1
     fiscal_years = list(range(target_year - years + 1, target_year + 1))
 
-    rows: list[dict[str, Any]] = []
-    for code in codes:
-        for fiscal_year in fiscal_years:
-            if not _quota_tracker.can_call(1):
-                log.info("dart daily quota exhausted, skipping remaining requests", stock_code=code)
-                break
+    def _fetch_and_normalize(code_year: tuple[str, int]) -> dict[str, Any] | None:
+        code, fiscal_year = code_year
+        if not _quota_tracker.can_call(1):
+            log.info("dart daily quota exhausted, skipping request", stock_code=code)
+            return None
 
-            try:
-                raw = _fetch_raw_statement(dart, code, fiscal_year)
-                _quota_tracker.add_calls(1)
-            except Exception as exc:
-                log.warning(
-                    "dart financial collection failed",
-                    stock_code=code,
-                    fiscal_year=fiscal_year,
-                    error=str(exc),
-                )
-                continue
-
+        try:
+            raw = _fetch_raw_statement(dart, code, fiscal_year)
+            _quota_tracker.add_calls(1)
             normalized = normalize_financial_statement(raw, code, fiscal_year)
-            if normalized is not None:
-                rows.append(normalized)
+            return normalized
+        except Exception as exc:
+            log.warning(
+                "dart financial collection failed",
+                stock_code=code,
+                fiscal_year=fiscal_year,
+                error=str(exc),
+            )
+            return None
+
+    code_year_pairs = [(code, year) for code in codes for year in fiscal_years]
+    rows = [r for r in parallel_map(_fetch_and_normalize, code_year_pairs, max_workers=2) if r is not None]
 
     result = pd.DataFrame(rows, columns=_fundamental_columns())
     log.info("dart financial collection complete", total=len(result))
