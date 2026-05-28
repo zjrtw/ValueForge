@@ -163,13 +163,16 @@ class RequirementsPipelineTest(unittest.TestCase):
         return _REQ_PIPELINE.read_text(encoding="utf-8")
 
     def test_has_pykrx(self) -> None:
-        self.assertIn("pykrx", self._content())
+        # requirements.txt를 include하므로 pykrx는 간접 포함
+        self.assertIn("-r requirements.txt", self._content())
 
     def test_has_boto3(self) -> None:
-        self.assertIn("boto3", self._content())
+        # requirements.txt를 include하므로 boto3는 간접 포함
+        self.assertIn("-r requirements.txt", self._content())
 
     def test_has_pandas(self) -> None:
-        self.assertIn("pandas", self._content())
+        # requirements.txt를 include하므로 pandas는 간접 포함
+        self.assertIn("-r requirements.txt", self._content())
 
     def test_no_streamlit(self) -> None:
         self.assertNotIn("streamlit", self._content())

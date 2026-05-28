@@ -25,7 +25,7 @@ def parallel_map(
         chunk_size: executor에 미리 제출할 청크 크기 (메모리 최적화)
 
     Yields:
-        함수 실행 결과 (제출 순서대로)
+        함수 실행 결과 (원래 순서대로)
     """
     items_list = list(items)
     results = [None] * len(items_list)
@@ -39,6 +39,7 @@ def parallel_map(
 
         # 완료된 것부터 처리하면서 새 작업 추가
         next_idx = min(max_workers * chunk_size, len(items_list))
+        completed_count = 0
         for future in as_completed(future_to_idx.keys()):
             idx = future_to_idx.pop(future)
             try:
@@ -47,6 +48,7 @@ def parallel_map(
                 results[idx] = None
                 raise exc
 
+            completed_count += 1
             # 다음 작업 추가
             if next_idx < len(items_list):
                 future = executor.submit(func, items_list[next_idx])
