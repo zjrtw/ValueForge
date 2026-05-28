@@ -21,7 +21,7 @@ def get_db_connection() -> sqlite3.Connection:
     if local_db.exists():
         db_path = str(local_db)
     else:
-        db_path = download_latest_db()
+        db_path = str(download_latest_db())
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row

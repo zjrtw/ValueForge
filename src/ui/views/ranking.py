@@ -262,7 +262,7 @@ def render() -> None:
         else:
             stage1_enabled = True
             stage3_exclude = True
-            min_score_test = 0.0
+            min_score_test = 0
 
         st.divider()
         st.subheader("기본 필터")

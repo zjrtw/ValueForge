@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any
 
 import pandas as pd
 from pykrx import stock
@@ -80,7 +81,7 @@ def fetch_stock_listing_info() -> pd.DataFrame:
         import pykrx.website.krx.market.core as _core
 
         # bld == MDCSTAT01901 인 클래스를 동적 탐색
-        fetcher = None
+        fetcher: Any = None
         for name in dir(_core):
             obj = getattr(_core, name)
             if isinstance(obj, type) and issubclass(obj, _core.KrxWebIo if hasattr(_core, "KrxWebIo") else object):
