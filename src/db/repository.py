@@ -219,6 +219,23 @@ class Repository:
         self.conn.commit()
         return len(records)
 
+    def update_prices_ratios(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
+        """기존 prices 행의 per, pbr, dividend_yield를 업데이트한다."""
+        records = _records(rows, ["stock_code", "date", "per", "pbr", "dividend_yield"])
+        if not records:
+            return 0
+
+        self.conn.executemany(
+            """
+            UPDATE prices
+            SET per = :per, pbr = :pbr, dividend_yield = :dividend_yield
+            WHERE stock_code = :stock_code AND date = :date
+            """,
+            records,
+        )
+        self.conn.commit()
+        return len(records)
+
     def upsert_fundamentals(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
         records = _records(
             rows,
@@ -660,6 +677,45 @@ class Repository:
             ),
         )
         self.conn.commit()
+
+    def get_cached_fundamental_pairs(
+        self,
+        codes: list[str],
+        fiscal_years: list[int],
+        ttl_days: int = 30,
+    ) -> set[tuple[str, int]]:
+        """TTL 이내에 수집된 (stock_code, fiscal_year) 쌍을 반환한다.
+
+        반환된 쌍은 API 호출을 건너뛸 수 있는 캐시 HIT 목록이다.
+        fiscal_quarter = 0 (연간)만 대상으로 한다.
+
+        Args:
+            codes: 조회 대상 종목 코드 리스트
+            fiscal_years: 조회 대상 회계년도 리스트
+            ttl_days: 캐시 유효 기간 (일), 기본값 30일
+
+        Returns:
+            TTL 이내에 수집된 (stock_code, fiscal_year) 튜플 집합
+        """
+        if not codes or not fiscal_years:
+            return set()
+
+        placeholders_codes = ",".join("?" * len(codes))
+        placeholders_years = ",".join("?" * len(fiscal_years))
+
+        rows = self.conn.execute(
+            f"""
+            SELECT DISTINCT stock_code, fiscal_year
+            FROM fundamentals
+            WHERE fiscal_quarter = 0
+              AND stock_code IN ({placeholders_codes})
+              AND fiscal_year IN ({placeholders_years})
+              AND julianday('now') - julianday(collected_at) <= ?
+            """,
+            [*codes, *fiscal_years, ttl_days],
+        ).fetchall()
+
+        return {(str(row[0]), int(row[1])) for row in rows}
 
 
 def _records(

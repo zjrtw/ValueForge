@@ -42,11 +42,13 @@ _FUNDAMENTALS = pd.DataFrame([
     {"stock_code": "005930", "fiscal_year": 2024, "fiscal_quarter": 0,
      "revenue": 300e6, "operating_profit": 30e6, "total_equity": 50e6,
      "roe": 15.0, "roa": 8.0, "debt_to_equity": 1.0, "current_ratio": 2.0,
-     "interest_coverage": 8.0, "free_cash_flow": 20e6, "operating_margin": 0.10},
+     "interest_coverage": 8.0, "free_cash_flow": 20e6, "operating_margin": 0.10,
+     "eps": 5000.0, "bps": 50000.0, "dps": 1000.0},
     {"stock_code": "000660", "fiscal_year": 2024, "fiscal_quarter": 0,
      "revenue": 200e6, "operating_profit": 25e6, "total_equity": 40e6,
      "roe": 12.0, "roa": 6.0, "debt_to_equity": 0.8, "current_ratio": 1.8,
-     "interest_coverage": 6.0, "free_cash_flow": 15e6, "operating_margin": 0.12},
+     "interest_coverage": 6.0, "free_cash_flow": 15e6, "operating_margin": 0.12,
+     "eps": 4000.0, "bps": 40000.0, "dps": 800.0},
 ])
 
 _SCREENING_DATASET = pd.DataFrame([
@@ -86,7 +88,6 @@ def _patch_collectors():
         patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_PRICES),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_FUNDAMENTALS),
-        patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.R2Uploader"),
     ]
     return patches

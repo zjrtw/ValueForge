@@ -6,7 +6,6 @@ import yfinance as yf
 
 from src.collectors.krx_prices import (
     _empty_history_frame,
-    _empty_price_frame,
     _format_output_date,
     _normalize_query_date,
 )
@@ -61,7 +60,11 @@ def fetch_yfinance_daily_price_data(
             }
         )
 
-    result = pd.DataFrame(rows, columns=_empty_price_frame().columns)
+    if not rows:
+        return _empty_yfinance_price_frame()
+
+    result = pd.DataFrame(rows)
+    result = result[["stock_code", "date", "close", "trading_value", "market_cap", "per", "pbr", "dividend_yield", "market"]]
     log.info("yfinance daily fallback collection complete", date=output_date, total=len(result))
     return result
 
@@ -176,3 +179,9 @@ def _multiply_or_none(left: object, right: object) -> float | None:
     if pd.isna(left_float) or pd.isna(right_float):
         return None
     return left_float * right_float
+
+
+def _empty_yfinance_price_frame() -> pd.DataFrame:
+    return pd.DataFrame(
+        columns=["stock_code", "date", "close", "trading_value", "market_cap", "per", "pbr", "dividend_yield", "market"]
+    )

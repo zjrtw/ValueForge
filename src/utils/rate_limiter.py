@@ -1,3 +1,4 @@
+import threading
 import time
 from collections.abc import Callable
 from datetime import date, datetime
@@ -44,6 +45,7 @@ class DailyQuotaTracker:
         self.daily_limit = daily_limit
         self._call_count = 0
         self._reset_date: date | None = None
+        self._lock = threading.Lock()
 
     def add_calls(self, count: int) -> bool:
         """
@@ -84,3 +86,34 @@ class DailyQuotaTracker:
         if self._reset_date is None or self._reset_date != today:
             return True
         return self._call_count + count <= self.daily_limit
+
+    def try_acquire(self, count: int = 1) -> bool:
+        """count개의 호출 슬롯을 원자적으로 확인하고 예약한다.
+
+        성공 시 True (호출 카운트 증가됨), 한도 초과 시 False.
+        스레드 안전(Thread-safe).
+        """
+        with self._lock:
+            today = datetime.now().date()
+            if self._reset_date is None or self._reset_date != today:
+                self._call_count = 0
+                self._reset_date = today
+
+            if self._call_count + count > self.daily_limit:
+                log.warning(
+                    "daily quota limit exceeded",
+                    current=self._call_count,
+                    requested=count,
+                    limit=self.daily_limit,
+                    date=str(today),
+                )
+                return False
+
+            self._call_count += count
+            log.debug(
+                "api calls recorded",
+                total_today=self._call_count,
+                limit=self.daily_limit,
+                remaining=self.daily_limit - self._call_count,
+            )
+            return True

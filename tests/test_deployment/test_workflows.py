@@ -32,12 +32,11 @@ class DailyPipelineWorkflowTest(unittest.TestCase):
         text = _text(_DAILY)
         for name in [
             "DART_API_KEY",
+            "KRX_AUTH_KEY",
             "R2_ENDPOINT_URL",
             "R2_ACCESS_KEY_ID",
             "R2_SECRET_ACCESS_KEY",
             "R2_BUCKET_NAME",
-            "KRX_ID",
-            "KRX_PW",
         ]:
             self.assertIn(f"{name}:", text)
             self.assertIn(f"${{{{ secrets.{name} }}}}", text)

@@ -2,8 +2,9 @@
  * Cloudflare Workers — ValueForge 파이프라인 스케줄러 (전담)
  *
  * 동작:
- *   1. 매 영업일 08:00 UTC (17:00 KST) 실행
+ *   1. 매 영업일 23:00 UTC (08:00 KST+1, 즉 다음 날 오전 8시) 실행
  *   2. GitHub Actions의 workflow_dispatch API를 직접 호출하여 파이프라인 트리거
+ *   3. KRX 익일 데이터 공개 후 파이프라인 실행
  */
 
 const REPO          = "zjrtw/ValueForge";

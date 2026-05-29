@@ -113,7 +113,7 @@ class ReadmeArchitectureTest(unittest.TestCase):
 
     def test_architecture_diagram_present(self) -> None:
         # ASCII 다이어그램 또는 코드블록
-        self.assertIn("pykrx", _text())
+        self.assertIn("KRX Open API", _text())
         self.assertIn("DART", _text())
         self.assertIn("Streamlit", _text())
 

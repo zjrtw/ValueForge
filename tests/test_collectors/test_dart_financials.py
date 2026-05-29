@@ -136,3 +136,73 @@ def test_fetch_financial_statements_stops_when_quota_exhausted(monkeypatch):
     assert fake.calls[0] == ("005930", 2024, "11011")
     assert len(result) == 1
     assert result.loc[0, "stock_code"] == "005930"
+
+
+def test_fetch_financial_statements_skips_cached_pairs(monkeypatch, tmp_path):
+    import sqlite3
+
+    from src.db.repository import Repository
+
+    class FakeDart:
+        def __init__(self):
+            self.calls = []
+
+        def finstate(self, code, year, reprt_code):
+            self.calls.append((code, year, reprt_code))
+            return pd.DataFrame(
+                [
+                    {"sj_div": "IS", "account_nm": "매출액", "thstrm_amount": str(year)},
+                    {"sj_div": "BS", "account_nm": "자산총계", "thstrm_amount": "100"},
+                ]
+            )
+
+    # 임시 SQLite DB 생성 및 캐시 데이터 삽입
+    db_path = tmp_path / "test.db"
+    conn = sqlite3.connect(str(db_path))
+    repo = Repository(conn)
+
+    # 캐시 데이터 삽입
+    repo.upsert_stocks(
+        pd.DataFrame(
+            [
+                {"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"},
+                {"stock_code": "000660", "stock_name": "SK하이닉스", "market": "KOSPI"},
+            ]
+        )
+    )
+    repo.upsert_fundamentals(
+        [
+            {
+                "stock_code": "005930",
+                "fiscal_year": 2024,
+                "fiscal_quarter": 0,
+                "revenue": 2024,
+            },
+        ]
+    )
+
+    fake = FakeDart()
+    tickers = pd.DataFrame(
+        [
+            {"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"},
+            {"stock_code": "000660", "stock_name": "SK하이닉스", "market": "KOSPI"},
+        ]
+    )
+    monkeypatch.setattr("src.collectors.dart_financials.settings.MAX_TICKERS", 0)
+
+    # conn 전달 시 캐시 HIT
+    result = fetch_financial_statements(
+        tickers, years=2, base_year=2025, client=fake, conn=conn
+    )
+
+    # 005930-2024는 캐시 HIT → 호출 안 함
+    # 005930-2025, 000660-2024, 000660-2025는 캐시 MISS → 호출
+    assert len(fake.calls) == 3
+    assert ("005930", 2024, "11011") not in fake.calls
+    assert ("005930", 2025, "11011") in fake.calls
+    assert ("000660", 2024, "11011") in fake.calls
+    assert ("000660", 2025, "11011") in fake.calls
+    # 결과는 새로 수집한 것만 반환 (캐시는 제외)
+    assert len(result) == 3
+
+    conn.close()

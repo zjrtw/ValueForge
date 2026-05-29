@@ -34,15 +34,25 @@ jobs:
       - name: 의존성 설치
         run: pip install -r requirements-pipeline.txt
 
+      - name: 거래일 확인
+        id: check_trading_day
+        run: |
+          IS_TRADING_DAY=$(python -c "from src.utils.market_calendar import is_trading_day; print('true' if is_trading_day() else 'false')")
+          echo "is_trading_day=$IS_TRADING_DAY" >> $GITHUB_OUTPUT
+          if [ "$IS_TRADING_DAY" = "false" ]; then
+            echo "🔔 오늘은 KRX 휴장일입니다. 파이프라인을 건너뜁니다."
+            exit 0
+          fi
+          echo "✅ 거래일입니다. 파이프라인을 실행합니다."
+
       - name: 파이프라인 실행
         env:
           DART_API_KEY: ${{ secrets.DART_API_KEY }}
+          KRX_AUTH_KEY: ${{ secrets.KRX_AUTH_KEY }}
           R2_ENDPOINT_URL: ${{ secrets.R2_ENDPOINT_URL }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-          KRX_ID: ${{ secrets.KRX_ID }}
-          KRX_PW: ${{ secrets.KRX_PW }}
           MARKETS: ${{ github.event.inputs.markets || 'KOSPI' }}
         run: |
           DATE_ARG="${{ github.event.inputs.date_override }}"

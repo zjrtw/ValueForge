@@ -2,17 +2,21 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
 import pandas as pd
-from pykrx import stock
 
+from src.collectors.krx_client import fetch_market_daily
 from src.collectors.krx_tickers import fetch_ticker_list
-from src.utils.concurrent import parallel_map
 from src.utils.config import settings
 from src.utils.logger import get_logger
+from src.utils.market_calendar import is_trading_day, prev_trading_day
 from src.utils.rate_limiter import RateLimiter
 
 log = get_logger(__name__)
 
 _MARKETS = ("KOSPI", "KOSDAQ")
+_MARKET_ENDPOINTS: dict[str, str] = {
+    "KOSPI": "stk_bydd_trd",
+    "KOSDAQ": "ksq_bydd_trd",
+}
 _rate_limiter = RateLimiter(min_delay_seconds=0.5)
 
 
@@ -88,36 +92,56 @@ def fetch_avg_trading_value_20d(
 ) -> pd.DataFrame:
     """종목별 최근 20거래일 평균 거래대금을 산출한다.
 
-    pykrx의 종목별 OHLCV 기간 조회 결과에서 최신 ``window``개 행만 사용한다.
+    날짜별 전체 시장 조회 후 각 종목별로 최신 ``window``개 거래일의 거래대금 평균을 계산한다.
 
     반환 컬럼:
         stock_code, date, avg_trading_value_20d
     """
-    query_date = _normalize_query_date(base_date)
-    output_date = _format_output_date(query_date)
-    start_date = _shift_query_date(query_date, days=-lookback_days)
+    query_date_obj = _parse_date(base_date)
+    output_date = query_date_obj.isoformat()
+    query_date_str = query_date_obj.strftime("%Y%m%d")
 
-    ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date)
+    ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date_str)
     codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
 
     if tickers is None and settings.MAX_TICKERS > 0:
         codes = codes[: settings.MAX_TICKERS]
         log.info("avg trading value count limited for testing", limit=settings.MAX_TICKERS)
 
-    def _fetch_and_compute(code: str) -> dict | None:
-        try:
-            ohlcv = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
-            avg_value = _compute_avg_trading_value(ohlcv, window=window)
-            return {
-                "stock_code": code,
-                "date": output_date,
-                "avg_trading_value_20d": avg_value,
-            }
-        except Exception as exc:
-            log.warning("krx ohlcv history collection failed", stock_code=code, error=str(exc))
-            return None
+    daily_records: dict[str, list[float]] = {code: [] for code in codes}
 
-    rows = [r for r in parallel_map(_fetch_and_compute, codes, max_workers=4) if r is not None]
+    trading_dates = _get_trading_dates(query_date_obj, lookback_days)
+    for tdate in trading_dates:
+        date_str = tdate.strftime("%Y%m%d")
+        for market in _MARKETS:
+            try:
+                items = _rate_limiter.throttle(fetch_market_daily)(_MARKET_ENDPOINTS[market], date_str)
+                for item in items:
+                    code = _parse_code(item.get("ISU_SRT_CD"))
+                    if code in daily_records:
+                        trading_value = _parse_numeric(item.get("ACC_TRDVAL"))
+                        if trading_value is not None:
+                            daily_records[code].append(trading_value)
+            except Exception as exc:
+                log.debug("market daily fetch failed for avg computation", market=market, date=date_str, error=str(exc))
+                continue
+
+    rows = []
+    for code in codes:
+        values = daily_records[code]
+        if len(values) >= window:
+            avg_value = float(pd.Series(values).tail(window).mean())
+        elif values:
+            avg_value = float(pd.Series(values).mean())
+        else:
+            avg_value = None
+
+        rows.append({
+            "stock_code": code,
+            "date": output_date,
+            "avg_trading_value_20d": avg_value,
+        })
+
     result = pd.DataFrame(rows, columns=["stock_code", "date", "avg_trading_value_20d"])
     log.info("avg trading value collection complete", date=output_date, total=len(result))
     return result
@@ -131,81 +155,152 @@ def fetch_price_history_1y(
 ) -> pd.DataFrame:
     """모멘텀 계산용 최근 1년 OHLCV 이력을 수집한다.
 
-    pykrx 기간 조회 결과에서 최신 ``max_rows_per_ticker``개 거래일만 사용한다.
+    날짜별 전체 시장 조회 후 각 종목별로 최신 ``max_rows_per_ticker``개 거래일 데이터를 추출한다.
 
     반환 컬럼:
         stock_code, date, open, high, low, close, volume, trading_value
     """
-    query_date = _normalize_query_date(base_date)
-    start_date = _shift_query_date(query_date, days=-lookback_days)
+    query_date_obj = _parse_date(base_date)
+    query_date_str = query_date_obj.strftime("%Y%m%d")
 
-    ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date)
+    ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date_str)
     codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
 
     if tickers is None and settings.MAX_TICKERS > 0:
         codes = codes[: settings.MAX_TICKERS]
         log.info("price history count limited for testing", limit=settings.MAX_TICKERS)
 
-    def _fetch_and_normalize(code: str) -> pd.DataFrame | None:
-        try:
-            history = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
-            normalized = _normalize_history_frame(history, stock_code=code, max_rows=max_rows_per_ticker)
-            return normalized if not normalized.empty else None
-        except Exception as exc:
-            log.warning("krx price history collection failed", stock_code=code, error=str(exc))
-            return None
+    daily_history: dict[str, list[dict]] = {code: [] for code in codes}
 
-    frames = [f for f in parallel_map(_fetch_and_normalize, codes, max_workers=4) if f is not None]
+    trading_dates = _get_trading_dates(query_date_obj, lookback_days)
+    for tdate in trading_dates:
+        date_str = tdate.strftime("%Y%m%d")
+        for market in _MARKETS:
+            try:
+                items = _rate_limiter.throttle(fetch_market_daily)(_MARKET_ENDPOINTS[market], date_str)
+                for item in items:
+                    code = _parse_code(item.get("ISU_SRT_CD"))
+                    if code in daily_history:
+                        daily_history[code].append({
+                            "date": date_str,
+                            "open": _parse_numeric(item.get("TDD_OPNPRC")),
+                            "high": _parse_numeric(item.get("TDD_HGPRC")),
+                            "low": _parse_numeric(item.get("TDD_LWPRC")),
+                            "close": _parse_numeric(item.get("TDD_CLSPRC")),
+                            "volume": _parse_numeric(item.get("ACC_TRDVOL")),
+                            "trading_value": _parse_numeric(item.get("ACC_TRDVAL")),
+                        })
+            except Exception as exc:
+                log.debug("market daily fetch failed for history", market=market, date=date_str, error=str(exc))
+                continue
+
+    frames = []
+    for code in codes:
+        records = daily_history[code]
+        if not records:
+            continue
+
+        df = pd.DataFrame(records[-max_rows_per_ticker:])
+        df.insert(0, "stock_code", code)
+        df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+        frames.append(df)
 
     if not frames:
         return _empty_history_frame()
 
     result = pd.concat(frames, ignore_index=True)
-    log.info("price history collection complete", to_date=_format_output_date(query_date), total=len(result))
+    result = result[["stock_code", "date", "open", "high", "low", "close", "volume", "trading_value"]]
+    log.info("price history collection complete", to_date=query_date_obj.isoformat(), total=len(result))
     return result
 
 
 def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
-    ohlcv = _rate_limiter.throttle(stock.get_market_ohlcv_by_ticker)(query_date, market=market)
-    caps = _rate_limiter.throttle(stock.get_market_cap_by_ticker)(query_date, market=market)
-    fundamentals = _rate_limiter.throttle(stock.get_market_fundamental_by_ticker)(query_date, market=market)
+    from datetime import timedelta
 
-    ohlcv = _with_stock_code_index(ohlcv)
-    caps = _with_stock_code_index(caps)
-    fundamentals = _with_stock_code_index(fundamentals)
+    endpoint = _MARKET_ENDPOINTS.get(market.upper())
+    if not endpoint:
+        return _empty_price_frame()
 
-    merged = (
-        ohlcv[["stock_code", "시가", "고가", "저가", "종가", "거래량", "거래대금"]]
-        .merge(caps[["stock_code", "시가총액"]], on="stock_code", how="left")
-        .merge(fundamentals[["stock_code", "PER", "PBR", "DIV"]], on="stock_code", how="left")
-    )
-    merged["market"] = market
-    merged = merged.rename(
-        columns={
-            "시가": "open",
-            "고가": "high",
-            "저가": "low",
-            "종가": "close",
-            "거래량": "volume",
-            "거래대금": "trading_value",
-            "시가총액": "market_cap",
-            "PER": "per",
-            "PBR": "pbr",
-            "DIV": "dividend_yield",
-        }
-    )
+    try:
+        items = _rate_limiter.throttle(fetch_market_daily)(endpoint, query_date)
+    except Exception as exc:
+        log.warning("krx market daily fetch failed", market=market, endpoint=endpoint, error=str(exc))
+        return _empty_price_frame()
 
-    for column in ["open", "high", "low", "close", "volume", "trading_value", "market_cap", "per", "pbr", "dividend_yield"]:
-        merged[column] = pd.to_numeric(merged[column], errors="coerce")
+    # 결과 없으면 이전 거래일로 자동 재시도 (KRX API T+1~T+2 지연 대응)
+    if not items:
+        try:
+            query_date_obj = datetime.strptime(query_date, "%Y%m%d").date()
+            prev_date_obj = prev_trading_day(query_date_obj - timedelta(days=1))
+            prev_query_date = prev_date_obj.strftime("%Y%m%d")
+            log.info("krx daily price empty, retrying with previous trading day", market=market, original=query_date, retry=prev_query_date)
+            items = _rate_limiter.throttle(fetch_market_daily)(endpoint, prev_query_date)
+        except Exception as exc:
+            log.debug("krx market daily fetch retry failed", market=market, error=str(exc))
+            items = []
 
-    return merged
+    if not items:
+        return _empty_price_frame()
+
+    rows = []
+    for item in items:
+        # ISU_SRT_CD 우선, 없으면 ISU_CD 사용
+        code = _parse_code(item.get("ISU_SRT_CD"))
+        if not code:
+            code = _parse_code(item.get("ISU_CD"))
+        if not code:
+            continue
+
+        rows.append({
+            "stock_code": code,
+            "open": _parse_numeric(item.get("TDD_OPNPRC")),
+            "high": _parse_numeric(item.get("TDD_HGPRC")),
+            "low": _parse_numeric(item.get("TDD_LWPRC")),
+            "close": _parse_numeric(item.get("TDD_CLSPRC")),
+            "volume": _parse_numeric(item.get("ACC_TRDVOL")),
+            "trading_value": _parse_numeric(item.get("ACC_TRDVAL")),
+            "market_cap": _parse_numeric(item.get("MKTCAP")),
+            "per": None,
+            "pbr": None,
+            "dividend_yield": None,
+            "market": market.upper(),
+        })
+
+    if not rows:
+        return _empty_price_frame()
+
+    return pd.DataFrame(rows)
 
 
-def _with_stock_code_index(df: pd.DataFrame) -> pd.DataFrame:
-    result = df.copy()
-    result.index = result.index.astype(str).str.zfill(6)
-    result.index.name = "stock_code"
-    return result.reset_index()
+def _parse_code(raw: object) -> str:
+    """ISU_SRT_CD 값을 6자리 문자열로 정규화. 유효하지 않으면 빈 문자열 반환."""
+    if raw is None:
+        return ""
+    code = str(raw).strip().zfill(6)
+    return "" if code == "000000" or not code.isdigit() else code
+
+
+def _extract_code_from_isin(isin: object) -> str:
+    """ISU_CD (ISIN 형식 KR7XXXXXX00)에서 6자리 종목코드를 추출."""
+    if isin is None:
+        return ""
+    s = str(isin).strip()
+    # KR7로 시작하는 12자리 ISIN: KR7 + 6자리 코드 + 00
+    if len(s) >= 11 and s.startswith("KR7"):
+        code = s[3:9]  # 위치 3-9: 6자리
+        if code.isdigit():
+            return code
+    return ""
+
+
+def _parse_numeric(raw: object) -> float | None:
+    """쉼표 포함 숫자 문자열을 float로 변환."""
+    if raw is None:
+        return None
+    try:
+        return float(str(raw).replace(",", "").strip())
+    except (ValueError, AttributeError):
+        return None
 
 
 def _normalize_query_date(base_date: str | date | None) -> str:
@@ -228,14 +323,33 @@ def _shift_query_date(query_date: str, days: int) -> str:
     return shifted.strftime("%Y%m%d")
 
 
-def _compute_avg_trading_value(ohlcv: pd.DataFrame, window: int) -> float | None:
-    if "거래대금" not in ohlcv.columns or ohlcv.empty:
-        return None
+def _parse_date(base_date: str | date | None) -> date:
+    """문자열 또는 date를 date 객체로 변환."""
+    if base_date is None:
+        return date.today()
+    if isinstance(base_date, date):
+        return base_date
+    compact = str(base_date).replace("-", "").strip()
+    return datetime.strptime(compact, "%Y%m%d").date()
 
-    values = pd.to_numeric(ohlcv["거래대금"], errors="coerce").dropna().tail(window)
-    if values.empty:
-        return None
-    return float(values.mean())
+
+def _get_trading_dates(end_date: date, lookback_days: int) -> list[date]:
+    """종료일부터 역순으로 최대 N개의 거래일을 반환."""
+    trading_dates: list[date] = []
+    current = end_date
+    attempted = 0
+    max_attempts = lookback_days * 2
+
+    while len(trading_dates) < lookback_days and attempted < max_attempts:
+        try:
+            if is_trading_day(current):
+                trading_dates.append(current)
+        except Exception:
+            pass
+        current = current - timedelta(days=1)
+        attempted += 1
+
+    return sorted(trading_dates)
 
 
 def _normalize_history_frame(
@@ -278,8 +392,11 @@ def _empty_price_frame() -> pd.DataFrame:
     return pd.DataFrame(
         columns=[
             "stock_code",
-            "date",
+            "open",
+            "high",
+            "low",
             "close",
+            "volume",
             "trading_value",
             "market_cap",
             "per",

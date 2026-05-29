@@ -23,8 +23,8 @@ ValueForge는 매일 장 마감 후 자동으로 한국 주식 시장 전체를 
 ```
 [장 마감 후 자동 실행 — 17:00 KST]
          │
-         ├─► pykrx        → 주가·PER·PBR·시가총액
-         ├─► DART OpenAPI → 연간 재무제표 (3개년)
+         ├─► KRX Open API  → 주가·시가총액 (공식 API)
+         ├─► DART OpenAPI → 연간 재무제표 + EPS·BPS·DPS (3개년)
          │
          ▼
   4단계 스크리닝 파이프라인
@@ -48,7 +48,7 @@ ValueForge는 매일 장 마감 후 자동으로 한국 주식 시장 전체를 
 
 | 계층 | 기술 | 비용 |
 |---|---|---|
-| 데이터 수집 | pykrx + DART OpenAPI | 무료 |
+| 데이터 수집 | KRX Open API + DART OpenAPI | 무료 |
 | 데이터베이스 | SQLite | 무료 |
 | 스토리지 | Cloudflare R2 | 무료 (10GB) |
 | 스케줄러 | Hetzner CX11 + cron 또는 GitHub Actions | $0~$3.29/월 |
@@ -102,15 +102,47 @@ R2_BUCKET_NAME=valueforge
 
 → 전체 변수 설명: [docs/ENV_VARS.md](docs/ENV_VARS.md)
 
-### 4. 실행
+### 4. 파이프라인 실행
+
+#### Windows (run_pipeline.bat)
 
 ```bash
-# 파이프라인 테스트 실행 (50개 종목, R2 업로드 없음)
-MAX_TICKERS=50 python -m src.pipeline.runner --no-upload
+# 기본 실행 (오늘 날짜)
+.\run_pipeline.bat
 
-# 전체 파이프라인 실행
+# 특정 날짜 지정
+.\run_pipeline.bat --date 2026-05-25
+
+# 소수 종목으로 빠른 테스트 (50개 종목)
+set MAX_TICKERS=50
+.\run_pipeline.bat --date 2026-05-25
+
+# R2 업로드 포함
+.\run_pipeline.bat --upload --date 2026-05-25
+
+# 테스트 후 파이프라인 실행
+.\run_pipeline.bat -t --date 2026-05-25
+```
+
+#### Linux/Mac (직접 실행)
+
+```bash
+# 기본 실행 (오늘 날짜)
 python -m src.pipeline.runner
 
+# 특정 날짜 지정
+python -m src.pipeline.runner --date 2026-05-25
+
+# 소수 종목으로 빠른 테스트
+MAX_TICKERS=50 python -m src.pipeline.runner --date 2026-05-25 --no-upload
+
+# R2 업로드 포함
+python -m src.pipeline.runner --date 2026-05-25
+```
+
+#### 대시보드 & 테스트
+
+```bash
 # Streamlit 대시보드 로컬 실행
 streamlit run src/ui/app.py
 
@@ -118,6 +150,8 @@ streamlit run src/ui/app.py
 pytest tests/ -v
 ruff check src/ && mypy src/ --ignore-missing-imports
 ```
+
+**날짜 형식**: `YYYY-MM-DD` (예: `2026-05-25`) 또는 `today`
 
 ---
 
@@ -151,12 +185,11 @@ docker compose up dashboard
 | 시크릿 | 설명 |
 |---|---|
 | `DART_API_KEY` | DART OpenAPI 키 |
+| `KRX_AUTH_KEY` | KRX Open API 인증키 |
 | `R2_ENDPOINT_URL` | R2 엔드포인트 URL |
 | `R2_ACCESS_KEY_ID` | R2 읽기+쓰기 액세스 키 |
 | `R2_SECRET_ACCESS_KEY` | R2 시크릿 키 |
 | `R2_BUCKET_NAME` | R2 버킷 이름 |
-| `KRX_ID` | KRX 정보데이터시스템 로그인 ID |
-| `KRX_PW` | KRX 정보데이터시스템 로그인 비밀번호 |
 
 매 거래일 17:00 KST에 `.github/workflows/daily_pipeline.yml`이 자동 실행됩니다.
 
@@ -183,7 +216,7 @@ sudo -u valueforge nano /home/valueforge/.env  # API 키 입력
 ```
 ValueForge/
 ├── src/
-│   ├── collectors/          # pykrx, DART 데이터 수집
+│   ├── collectors/          # KRX Open API, DART 데이터 수집
 │   ├── db/                  # SQLite 스키마, Repository 패턴
 │   ├── pipeline/            # 파이프라인 오케스트레이터
 │   ├── screening/           # Stage 1~4 스크리닝 로직
@@ -240,6 +273,8 @@ ValueForge/
 | [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | 비용 분석 |
 | [docs/FUTURE_UPGRADE.md](docs/FUTURE_UPGRADE.md) | 향후 개선 계획 |
 | [docs/TASKS.md](docs/TASKS.md) | 마일스톤 구현 태스크 |
+| [docs/DART_OPTIMIZATION.md](docs/DART_OPTIMIZATION.md) | DART API 캐싱 & 최적화 전략 |
+| [docs/PERFORMANCE_BENCHMARKS.md](docs/PERFORMANCE_BENCHMARKS.md) | 성능 벤치마크 & 최적화 실적 |
 
 ---
 

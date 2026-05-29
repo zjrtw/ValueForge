@@ -468,6 +468,99 @@ class RepositoryTest(unittest.TestCase):
         self.assertEqual(replaced, 1)
         self.assertEqual(rows, [("EXCESSIVE_DEBT", "HIGH", 350.0, 300.0)])
 
+    def test_get_cached_fundamental_pairs_returns_fresh_pairs(self) -> None:
+        self.repo.upsert_stocks(
+            [
+                {"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"},
+                {"stock_code": "000660", "stock_name": "SK하이닉스", "market": "KOSPI"},
+            ]
+        )
+
+        self.repo.upsert_fundamentals(
+            [
+                {
+                    "stock_code": "005930",
+                    "fiscal_year": 2025,
+                    "fiscal_quarter": 0,
+                    "revenue": 300_000,
+                    "operating_profit": 35_000,
+                },
+                {
+                    "stock_code": "000660",
+                    "fiscal_year": 2025,
+                    "fiscal_quarter": 0,
+                    "revenue": 200_000,
+                    "operating_profit": 25_000,
+                },
+                {
+                    "stock_code": "005930",
+                    "fiscal_year": 2024,
+                    "fiscal_quarter": 0,
+                    "revenue": 280_000,
+                    "operating_profit": 33_000,
+                },
+            ]
+        )
+
+        # TTL 30일 이내 모든 쌍 반환
+        cached = self.repo.get_cached_fundamental_pairs(
+            ["005930", "000660"], [2025, 2024], ttl_days=30
+        )
+
+        self.assertEqual(cached, {("005930", 2025), ("000660", 2025), ("005930", 2024)})
+
+    def test_get_cached_fundamental_pairs_returns_empty_for_stale_data(self) -> None:
+        self.repo.upsert_stocks(
+            [{"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"}]
+        )
+
+        # 수동으로 very old timestamp 삽입 (31일 전)
+        self.conn.execute(
+            """
+            INSERT INTO fundamentals
+            (stock_code, fiscal_year, fiscal_quarter, collected_at)
+            VALUES (?, ?, ?, datetime('now', '-31 days'))
+            """,
+            ("005930", 2025, 0),
+        )
+        self.conn.commit()
+
+        # TTL 30일로 조회하면 빈 결과
+        cached = self.repo.get_cached_fundamental_pairs(
+            ["005930"], [2025], ttl_days=30
+        )
+
+        self.assertEqual(cached, set())
+
+    def test_get_cached_fundamental_pairs_ignores_quarterly_data(self) -> None:
+        self.repo.upsert_stocks(
+            [{"stock_code": "005930", "stock_name": "삼성전자", "market": "KOSPI"}]
+        )
+
+        self.repo.upsert_fundamentals(
+            [
+                {
+                    "stock_code": "005930",
+                    "fiscal_year": 2025,
+                    "fiscal_quarter": 0,  # 연간
+                    "revenue": 300_000,
+                },
+                {
+                    "stock_code": "005930",
+                    "fiscal_year": 2025,
+                    "fiscal_quarter": 1,  # 분기
+                    "revenue": 75_000,
+                },
+            ]
+        )
+
+        # fiscal_quarter = 0만 반환 (분기 데이터는 제외)
+        cached = self.repo.get_cached_fundamental_pairs(
+            ["005930"], [2025], ttl_days=30
+        )
+
+        self.assertEqual(cached, {("005930", 2025)})
+
 
 if __name__ == "__main__":
     unittest.main()

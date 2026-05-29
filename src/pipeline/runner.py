@@ -17,15 +17,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
+from src.collectors.dart_financials import fetch_financial_statements
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_stock_listing_info, fetch_ticker_list
+from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
 from src.storage.uploader import R2Uploader
+from src.utils.config import settings
 from src.utils.error_handling import check_collection_threshold
 from src.utils.logger import get_logger
 from src.utils.market_calendar import is_trading_day
@@ -116,9 +118,15 @@ def run_pipeline(
 
     finally:
         conn.close()
-        if db_path is None and _db_path.exists():
+        # DB 삭제 정책
+        # PRESERVE_DB=False (기본): db_path가 None이면 삭제 (로컬 테스트)
+        # PRESERVE_DB=True: DB 항상 유지 (운영 환경, 캐시 활용)
+        should_delete = (db_path is None and not settings.PRESERVE_DB)
+        if should_delete and _db_path.exists():
             _db_path.unlink()
             log.info("pipeline_temp_db_removed", path=str(_db_path))
+        elif db_path is None and settings.PRESERVE_DB and _db_path.exists():
+            log.info("pipeline_db_preserved", path=str(_db_path))
 
 
 # ---------------------------------------------------------------------------
@@ -160,21 +168,24 @@ def _collect(
 
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
-    fundamentals = fetch_financial_statements(tickers)
+    fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
     else:
         log.warning("collect_fundamentals_empty")
 
-    # 5. DART 회사 메타데이터 (listing_date, industry) — stocks 테이블 보강
-    log.info("collect_company_metadata_start")
-    company_meta = fetch_company_metadata(tickers)
-    if not company_meta.empty:
-        repo.update_stock_metadata(company_meta)
-        log.info("collect_company_metadata_done", count=len(company_meta))
+    # 4. 시장 배수 계산 (PER, PBR, 배당수익률)
+    if not prices.empty and not fundamentals.empty:
+        log.info("calculate_market_ratios_start")
+        ratios = calculate_market_ratios(prices, fundamentals)
+        if not ratios.empty:
+            repo.update_prices_ratios(ratios)
+            log.info("calculate_market_ratios_done", count=len(ratios))
+        else:
+            log.warning("calculate_market_ratios_empty")
     else:
-        log.warning("collect_company_metadata_empty")
+        log.warning("calculate_market_ratios_skipped", prices_empty=prices.empty, fundamentals_empty=fundamentals.empty)
 
     return tickers, n_collected, n_errors
 

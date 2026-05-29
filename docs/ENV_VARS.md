@@ -30,18 +30,17 @@ DART_API_KEY=a1b2c3d4e5f6...
 
 ---
 
-### KRX_ID / KRX_PW
+### KRX_AUTH_KEY
 
 | 항목 | 내용 |
 |---|---|
 | 필수 여부 | **필수** (파이프라인) |
 | 기본값 | 없음 |
-| 발급 | [KRX 정보데이터시스템](http://data.krx.co.kr/) 회원가입 (무료) |
-| 용도 | pykrx 주가 데이터 수집 시 로그인 (KRX 정책 변경 대응) |
+| 발급 | [KRX Open API](https://openapi.krx.co.kr) → API 신청 (무료) |
+| 용도 | KOSPI/KOSDAQ 종목 정보, 일별매매 데이터 조회 |
 
 ```bash
-KRX_ID=your_krx_id
-KRX_PW=your_krx_password
+KRX_AUTH_KEY=your_krx_auth_key_here
 ```
 
 ---
@@ -164,13 +163,50 @@ DB_PATH=/tmp/valueforge.db
 
 ---
 
+### DART_MAX_WORKERS
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | `4` |
+| 범위 | `1` ~ `16` |
+| 용도 | DART 재무 데이터 수집 시 병렬 스레드 수 |
+| 성능 | max_workers 4 → 8로 증가 시 ~20% 개선 |
+
+```bash
+DART_MAX_WORKERS=4      # 개발 환경 (기본값)
+DART_MAX_WORKERS=8      # 운영 환경 (권장)
+DART_MAX_WORKERS=16     # 최대값
+```
+
+---
+
+### PRESERVE_DB
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | `false` |
+| 유효값 | `true` \| `false` |
+| 용도 | 파이프라인 후 SQLite DB 유지 여부 |
+
+```bash
+PRESERVE_DB=false       # 로컬 개발 (파이프라인 후 DB 삭제)
+PRESERVE_DB=true        # 운영 환경 (DB 유지, DART 캐시 활용)
+```
+
+**운영 환경 설정 시 효과:**
+- 당일 재실행: DART API 호출 0회 (100% 캐시 히트)
+- 월간 DART API 호출: 180,000회 → 6,000회 (97% 절약)
+
+---
+
 ## 환경별 설정 요약
 
 | 변수 | 파이프라인 서버 | Streamlit Cloud | 로컬 개발 |
 |---|---|---|---|
 | `DART_API_KEY` | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
-| `KRX_ID`       | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
-| `KRX_PW`       | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
+| `KRX_AUTH_KEY` | ✅ 필수 | ❌ 불필요 | ✅ 필수 |
 | `R2_ENDPOINT_URL` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
 | `R2_ACCESS_KEY_ID` | ✅ 읽기+쓰기 | ✅ 읽기 전용 | ✅ 읽기+쓰기 |
 | `R2_SECRET_ACCESS_KEY` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
@@ -178,6 +214,8 @@ DB_PATH=/tmp/valueforge.db
 | `MAX_TICKERS` | 선택 (`0`) | ❌ 불필요 | 권장 (`50`) |
 | `LOG_LEVEL` | 선택 (`INFO`) | ❌ 불필요 | 선택 (`DEBUG`) |
 | `DB_PATH` | 선택 | ❌ 불필요 | 선택 |
+| `DART_MAX_WORKERS` | 선택 (`8`) | ❌ 불필요 | 선택 (`4`) |
+| `PRESERVE_DB` | 선택 (`true`) | ❌ 불필요 | 선택 (`false`) |
 
 ---
 

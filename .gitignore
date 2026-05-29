@@ -43,6 +43,8 @@ Thumbs.db
 htmlcov/
 .mypy_cache/
 .ruff_cache/
+tmp-test/
+.local/
 
 # Streamlit
 .streamlit/secrets.toml

@@ -163,13 +163,22 @@
 | ☑ | M6-1-1 | test.yml 병렬 실행 활성화 | pytest, mypy, ruff를 동시 실행 → ~35-40% 단축 | 쉬움 | 30m |
 | ☑ | M6-1-2 | daily_pipeline.yml Python 캐시 추가 | pip 캐시 활성화 → 의존성 설치 50-70% 단축 | 쉬움 | 20m |
 | ☑ | M6-1-3 | 파이프라인 API 호출 동시성 강화 | pykrx·opendartreader 멀티스레딩/비동기 적용 | 보통 | 2h |
-| ☐ | M6-1-4 | DART 배치 처리 최적화 | 종목별 개별 호출 → 배치 API 활용으로 통신 횟수 감축 | 보통 | 1.5h |
+| ☑ | M6-1-4 | DART API 캐싱 최적화 | fundamentals 테이블 TTL 기반 캐싱 + 스레드 세이프 quota 관리 → 반복 실행 시 API 호출 0으로 감축 | 보통 | 1.5h |
 
 **체크포인트**: test.yml < 5분, daily_pipeline.yml < 60분으로 단축 확인.
 
+### Milestone 6-2: DART & DB 재사용 성능 최적화
+
+| Done | ID | 설명 | 예상 효과 | 난이도 | 시간 |
+|---|---|---|---|---|---|
+| ☑ | M6-2-1 | DART 병렬 수 설정화 | max_workers: 2 → 4~8 (설정) → DART 수집 180초 → 105초 (42% 단축) | 쉬움 | 30m |
+| ☑ | M6-2-2 | DB 재사용 구조 개선 | PRESERVE_DB 옵션 추가 → 월간 quota 97% 절약, 당일 재실행 캐시 100% 활용 | 보통 | 2h |
+
+**체크포인트**: DART 수집 < 2분, 월간 quota < 10,000회 유지 확인.
+
 ---
 
-## Milestone 6-2: DART 배치 처리 최적화 (향후 개선)
+## Milestone 6-3: DART 배치 처리 최적화 (향후 개선)
 
 > 현재 M6-1-1~M6-1-3으로 충분한 성능 개선이 이뤄졌으므로, 추가 최적화는 투입 대비 효과 검증 후 진행.
 
@@ -265,13 +274,13 @@ class Repository:
 | ☑ | M7-1 | KRX Open API 클라이언트 구현 | `src/collectors/krx_client.py` 신설. `AUTH_KEY` 헤더 주입, JSON 응답 파싱, rate limiting, 재시도 래퍼 | M0 | 쉬움 | 1h |
 | ☑ | M7-2 | 배당수익률 포함 여부 검증 | `/stk_bydd_trd` 실제 호출로 `DIV_YD`(또는 동등 필드) 존재 확인. 미포함 시 별도 API 엔드포인트 식별 | M7-1 | 쉬움 | 30m |
 | ☑ | M7-3 | 종목 수집기 마이그레이션 | `krx_tickers.py`: pykrx 제거 → `/stk_isu_base_info` + `/ksq_isu_base_info`. `LIST_DD`(상장일), `LIST_SHRS`(상장주식수) 매핑 | M7-1 | 보통 | 2h |
-| ☐ | M7-4 | 일별 가격 수집기 마이그레이션 | `krx_prices.py`: `/stk_bydd_trd`, `/ksq_bydd_trd`. `TDD_CLSPRC`→close, `ACC_TRDVAL`→trading_value, `MKTCAP`, `PER`, `PBR`, 배당수익률(M7-2 결과 반영) 컬럼 매핑 | M7-1, M7-2 | 보통 | 3h |
-| ☐ | M7-5 | 1년 이력 수집 재설계 | `fetch_price_history_1y()`, `fetch_avg_trading_value_20d()` 재구현. 날짜별 전체 시장 조회 후 피벗. 기존 `parallel_map(ticker별)` → `sequential(날짜별)` 전환 | M7-4 | 보통 | 2h |
-| ☐ | M7-6 | 설정 및 의존성 업데이트 | `settings.py`에 `KRX_AUTH_KEY` 추가, `.env.example` 반영, `docs/ENV_VARS.md` 업데이트, `requirements.txt`에서 `pykrx` 제거 | M7-3, M7-4 | 쉬움 | 30m |
-| ☐ | M7-7 | 수집기 테스트 업데이트 | `tests/test_collectors/` mock 전략 변경: `pykrx.stock.*` → `requests.get` 응답 모킹(`responses` 라이브러리 또는 `unittest.mock`). 기존 테스트 케이스 유지 | M7-3 ~ M7-5 | 보통 | 2h |
-| ☐ | M7-8 | DART BPS/DPS 계정명 추가 | `dart_financials.py`의 `_ACCOUNT_MAP`에 누락 항목 추가: `"bps": ("주당순자산가치", "1주당 순자산")`, `"dps": ("주당배당금", "현금배당금(보통주)")`. `fundamentals` 테이블 컬럼은 이미 존재하므로 수집 로직만 보완 | M0 | 쉬움 | 1h |
-| ☐ | M7-9 | 시장 배수 계산기 구현 | `src/collectors/market_ratios.py` 신설. `prices.close` + `fundamentals.eps/bps/dps` → `per/pbr/dividend_yield` 계산 후 `prices` 테이블 갱신. 파이프라인 runner에 DART·KRX 수집 완료 후 단계로 추가 | M7-4, M7-8 | 보통 | 2h |
-| ☐ | M7-10 | 시장 배수 계산 테스트 | 합성 데이터(prices + fundamentals)로 `market_ratios.py` 단위 테스트. 엣지 케이스: eps=0, bps=None, dps 누락 시 None 처리 검증 | M7-9 | 쉬움 | 1h |
+| ☑ | M7-4 | 일별 가격 수집기 마이그레이션 | `krx_prices.py`: `/stk_bydd_trd`, `/ksq_bydd_trd`. `TDD_CLSPRC`→close, `ACC_TRDVAL`→trading_value, `MKTCAP`, `PER`, `PBR`, 배당수익률(M7-2 결과 반영) 컬럼 매핑 | M7-1, M7-2 | 보통 | 3h |
+| ☑ | M7-5 | 1년 이력 수집 재설계 | `fetch_price_history_1y()`, `fetch_avg_trading_value_20d()` 재구현. 날짜별 전체 시장 조회 후 피벗. 기존 `parallel_map(ticker별)` → `sequential(날짜별)` 전환 | M7-4 | 보통 | 2h |
+| ☑ | M7-6 | 설정 및 의존성 업데이트 | `settings.py`에 `KRX_AUTH_KEY` 추가, `.env.example` 반영, `docs/ENV_VARS.md` 업데이트, `requirements.txt`에서 `pykrx` 제거 | M7-3, M7-4 | 쉬움 | 30m |
+| ☑ | M7-7 | 수집기 테스트 업데이트 | `tests/test_collectors/` mock 전략 변경: `pykrx.stock.*` → `requests.get` 응답 모킹(`responses` 라이브러리 또는 `unittest.mock`). 기존 테스트 케이스 유지 | M7-3 ~ M7-5 | 보통 | 2h |
+| ☑ | M7-8 | DART BPS/DPS 계정명 추가 | `dart_financials.py`의 `_ACCOUNT_MAP`에 누락 항목 추가: `"bps": ("주당순자산가치", "1주당 순자산")`, `"dps": ("주당배당금", "현금배당금(보통주)")`. `fundamentals` 테이블 컬럼은 이미 존재하므로 수집 로직만 보완 | M0 | 쉬움 | 1h |
+| ☑ | M7-9 | 시장 배수 계산기 구현 | `src/collectors/market_ratios.py` 신설. `prices.close` + `fundamentals.eps/bps/dps` → `per/pbr/dividend_yield` 계산 후 `prices` 테이블 갱신. 파이프라인 runner에 DART·KRX 수집 완료 후 단계로 추가 | M7-4, M7-8 | 보통 | 2h |
+| ☑ | M7-10 | 시장 배수 계산 테스트 | 합성 데이터(prices + fundamentals)로 `market_ratios.py` 단위 테스트. 엣지 케이스: eps=0, bps=None, dps 누락 시 None 처리 검증 | M7-9 | 쉬움 | 1h |
 
 ### M7-2 검증 결과 요약
 

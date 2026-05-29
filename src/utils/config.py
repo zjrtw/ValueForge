@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import yaml
@@ -19,12 +18,8 @@ class Settings(BaseSettings):
     # DART API
     DART_API_KEY: str = ""
 
-    # KRX Open API (인증키 방식)
+    # KRX Open API
     KRX_AUTH_KEY: str = ""
-
-    # KRX 정보데이터시스템 API (pykrx — M7 전환 전까지 유지)
-    KRX_ID: str = ""
-    KRX_PW: str = ""
 
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""
@@ -37,6 +32,8 @@ class Settings(BaseSettings):
     MARKETS: str = "KOSPI,KOSDAQ"
     LOG_LEVEL: str = "INFO"
     DB_PATH: str = "/tmp/valueforge.db"
+    DART_MAX_WORKERS: int = Field(default=4, ge=1, le=16)
+    PRESERVE_DB: bool = Field(default=False)  # True: DB 유지 (운영), False: 삭제 (테스트)
 
 
 class ScreeningParams:
@@ -52,9 +49,4 @@ class ScreeningParams:
 
 settings = Settings()
 screening_params = ScreeningParams()
-
-if settings.KRX_ID:
-    os.environ.setdefault("KRX_ID", settings.KRX_ID)
-if settings.KRX_PW:
-    os.environ.setdefault("KRX_PW", settings.KRX_PW)
 

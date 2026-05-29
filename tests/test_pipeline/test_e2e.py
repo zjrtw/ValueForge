@@ -129,7 +129,6 @@ def _run_pipeline_no_upload(db_path: Path) -> dict:
         patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
-        patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
     ):
         return run_pipeline(_RUN_DATE, db_path=db_path, upload=False)
 
@@ -387,7 +386,6 @@ class E2EWithUploadTest(unittest.TestCase):
             patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
             patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
             patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
-            patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
             patch("src.pipeline.runner.R2Uploader", side_effect=_get_mocked_uploader),
         ):
             return run_pipeline(_RUN_DATE, db_path=self._db_path, upload=True)
