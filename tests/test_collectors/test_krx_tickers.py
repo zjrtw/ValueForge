@@ -4,7 +4,7 @@ krx_client.fetch_issue_base_info 를 모킹하여 실제 네트워크 호출 없
 """
 import pytest
 
-from src.collectors.krx_tickers import fetch_stock_listing_info, fetch_ticker_list
+from src.collectors.krx_tickers import fetch_ticker_list
 
 # KRX Open API stk_isu_base_info / ksq_isu_base_info 응답 형식
 _FAKE_KOSPI = [
@@ -45,7 +45,7 @@ def test_returns_kospi_and_kosdaq(patch_api):
     result = fetch_ticker_list()
 
     assert not result.empty
-    assert list(result.columns) == ["stock_code", "stock_name", "market", "shares_outstanding"]
+    assert list(result.columns) == ["stock_code", "stock_name", "market", "listing_date", "shares_outstanding"]
     assert len(result[result["market"] == "KOSPI"]) == len(_FAKE_KOSPI)
     assert len(result[result["market"] == "KOSDAQ"]) == len(_FAKE_KOSDAQ)
 
@@ -128,17 +128,11 @@ def test_api_error_skips_market(monkeypatch):
     assert set(result["market"]) == {"KOSDAQ"}
 
 
-# ── fetch_stock_listing_info ─────────────────────────────────────────────────
-
-def test_listing_info_returns_expected_columns(patch_api):
-    result = fetch_stock_listing_info()
-
-    assert list(result.columns) == ["stock_code", "listing_date", "shares_outstanding"]
-    assert not result.empty
-
+# ── fetch_ticker_list: listing_date inclusion ──────────────────────────────
 
 def test_listing_date_format(patch_api):
-    result = fetch_stock_listing_info()
+    """fetch_ticker_list에서 반환하는 listing_date가 YYYY-MM-DD 형식인지 확인."""
+    result = fetch_ticker_list()
 
     dates = result["listing_date"].dropna()
     assert dates.str.match(r"^\d{4}-\d{2}-\d{2}$").all(), "날짜가 YYYY-MM-DD 형식이어야 함"
@@ -152,13 +146,13 @@ def test_listing_date_slash_format(monkeypatch):
         lambda ep, d: slash_data if "stk" in ep else [],
     )
 
-    result = fetch_stock_listing_info()
+    result = fetch_ticker_list()
 
     assert result.iloc[0]["listing_date"] == "1975-06-11"
 
 
-def test_listing_shares_outstanding_is_integer(patch_api):
-    result = fetch_stock_listing_info()
+def test_shares_outstanding_is_integer(patch_api):
+    result = fetch_ticker_list()
 
     non_null = result["shares_outstanding"].dropna()
     assert (non_null == non_null.astype(int)).all()

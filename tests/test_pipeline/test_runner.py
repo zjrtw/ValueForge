@@ -85,7 +85,6 @@ def _patch_collectors():
     """수집기 의존성 패치 컨텍스트 관리자."""
     patches = [
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_TICKERS),
-        patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_PRICES),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_FUNDAMENTALS),
         patch("src.pipeline.runner.R2Uploader"),

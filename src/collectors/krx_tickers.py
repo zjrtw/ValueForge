@@ -16,12 +16,12 @@ _VALID_MARKETS = {"KOSPI", "KOSDAQ"}
 
 
 def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
-    """KOSPI·KOSDAQ 전 종목 코드·종목명·시장·상장주식수를 반환.
+    """KOSPI·KOSDAQ 전 종목 코드·종목명·시장·상장일·상장주식수를 반환.
 
     기준일 데이터가 없으면 자동으로 이전 거래일 재시도 (KRX API T+1~T+2 지연 대응).
 
     Returns:
-        columns: stock_code, stock_name, market, shares_outstanding
+        columns: stock_code, stock_name, market, listing_date, shares_outstanding
     """
     from datetime import timedelta
 
@@ -57,10 +57,11 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
                 "stock_code": code,
                 "stock_name": item.get("ISU_ABBRV") or item.get("ISU_NM") or code,
                 "market": market,
+                "listing_date": _parse_listing_date(item.get("LIST_DD")),
                 "shares_outstanding": _parse_int(item.get("LIST_SHRS")),
             })
 
-    df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market", "shares_outstanding"])
+    df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market", "listing_date", "shares_outstanding"])
 
     if settings.MAX_TICKERS > 0:
         df = df.head(settings.MAX_TICKERS)
@@ -68,38 +69,6 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
 
     log.info("ticker collection complete", total=len(df), markets=",".join(_selected_markets()))
     return df
-
-
-def fetch_stock_listing_info() -> pd.DataFrame:
-    """전 종목 상장일·상장주식수를 반환.
-
-    Returns:
-        columns: stock_code, listing_date (YYYY-MM-DD), shares_outstanding
-    """
-    bas_dd = _normalize_date(None)
-    rows: list[dict] = []
-
-    for market in ("KOSPI", "KOSDAQ"):
-        endpoint = _MARKET_ENDPOINTS[market]
-        try:
-            items = fetch_issue_base_info(endpoint, bas_dd)
-        except Exception as exc:
-            log.warning("krx listing info fetch failed", market=market, error=str(exc))
-            continue
-
-        for item in items:
-            code = _parse_code(item.get("ISU_SRT_CD"))
-            if not code:
-                continue
-            rows.append({
-                "stock_code": code,
-                "listing_date": _parse_listing_date(item.get("LIST_DD")),
-                "shares_outstanding": _parse_int(item.get("LIST_SHRS")),
-            })
-
-    result = pd.DataFrame(rows, columns=["stock_code", "listing_date", "shares_outstanding"])
-    log.info("listing info collection complete", total=len(result))
-    return result
 
 
 def _parse_code(raw: object) -> str:
