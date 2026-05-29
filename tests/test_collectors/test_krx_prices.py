@@ -1,10 +1,17 @@
 import pandas as pd
+import pytest
 
 from src.collectors.krx_prices import (
     fetch_avg_trading_value_20d,
     fetch_daily_price_data,
     fetch_price_history_1y,
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_krx_rate_limiter(mocker):
+    """KRX 테스트에서 rate_limiter 지연 제거 (0.5초씩 지연하면 테스트가 느려짐)."""
+    mocker.patch("src.collectors.krx_prices._rate_limiter.throttle", side_effect=lambda f: f)
 
 
 def test_fetch_daily_price_data_merges_krx_market_frames(mocker):

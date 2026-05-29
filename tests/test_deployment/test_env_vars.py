@@ -25,6 +25,8 @@ _REQUIRED_VARS = {
     "MARKETS",
     "LOG_LEVEL",
     "DB_PATH",
+    "DART_MAX_WORKERS",
+    "PRESERVE_DB",
 }
 
 # 실제 값이 없어야 하는 민감 변수

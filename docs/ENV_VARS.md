@@ -163,6 +163,44 @@ DB_PATH=/tmp/valueforge.db
 
 ---
 
+### DART_MAX_WORKERS
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | `4` |
+| 범위 | `1` ~ `16` |
+| 용도 | DART 재무 데이터 수집 시 병렬 스레드 수 |
+| 성능 | max_workers 4 → 8로 증가 시 ~20% 개선 |
+
+```bash
+DART_MAX_WORKERS=4      # 개발 환경 (기본값)
+DART_MAX_WORKERS=8      # 운영 환경 (권장)
+DART_MAX_WORKERS=16     # 최대값
+```
+
+---
+
+### PRESERVE_DB
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | `false` |
+| 유효값 | `true` \| `false` |
+| 용도 | 파이프라인 후 SQLite DB 유지 여부 |
+
+```bash
+PRESERVE_DB=false       # 로컬 개발 (파이프라인 후 DB 삭제)
+PRESERVE_DB=true        # 운영 환경 (DB 유지, DART 캐시 활용)
+```
+
+**운영 환경 설정 시 효과:**
+- 당일 재실행: DART API 호출 0회 (100% 캐시 히트)
+- 월간 DART API 호출: 180,000회 → 6,000회 (97% 절약)
+
+---
+
 ## 환경별 설정 요약
 
 | 변수 | 파이프라인 서버 | Streamlit Cloud | 로컬 개발 |
@@ -176,6 +214,8 @@ DB_PATH=/tmp/valueforge.db
 | `MAX_TICKERS` | 선택 (`0`) | ❌ 불필요 | 권장 (`50`) |
 | `LOG_LEVEL` | 선택 (`INFO`) | ❌ 불필요 | 선택 (`DEBUG`) |
 | `DB_PATH` | 선택 | ❌ 불필요 | 선택 |
+| `DART_MAX_WORKERS` | 선택 (`8`) | ❌ 불필요 | 선택 (`4`) |
+| `PRESERVE_DB` | 선택 (`true`) | ❌ 불필요 | 선택 (`false`) |
 
 ---
 
