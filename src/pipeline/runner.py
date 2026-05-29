@@ -19,7 +19,7 @@ import pandas as pd
 
 from src.collectors.dart_financials import fetch_financial_statements
 from src.collectors.krx_prices import fetch_daily_price_data
-from src.collectors.krx_tickers import fetch_stock_listing_info, fetch_ticker_list
+from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
 from src.screening.stage1_filter import stage1_filter
@@ -139,20 +139,11 @@ def _collect(
     run_date: date,
 ) -> tuple[pd.DataFrame, int, int]:
     """수집 단계: tickers → prices → fundamentals."""
-    # 1. 종목 코드
+    # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
     repo.upsert_stocks(tickers)
     log.info("collect_tickers_done", count=len(tickers))
-
-    # 1-1. KRX 종목기본정보 — listing_date, shares_outstanding 보강
-    log.info("collect_listing_info_start")
-    listing_info = fetch_stock_listing_info()
-    if not listing_info.empty:
-        repo.update_stock_metadata(listing_info)
-        log.info("collect_listing_info_done", count=len(listing_info))
-    else:
-        log.warning("collect_listing_info_empty")
 
     # 2. 일별 주가
     log.info("collect_prices_start")

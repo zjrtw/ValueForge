@@ -176,9 +176,186 @@
 
 **체크포인트**: DART 수집 < 2분, 월간 quota < 10,000회 유지 확인.
 
+### Milestone 6-3: 수집 & 스크리닝 로직 벡터화
+
+| Done | ID | 설명 | 예상 효과 | 난이도 | 시간 |
+|---|---|---|---|---|---|
+| ☐ | M6-3-1 | KRX 기본정보 중복 호출 제거 | `fetch_ticker_list()`에 `listing_date` 정보 포함 → `fetch_stock_listing_info()` 제거 → KRX API 호출 2회 → 1회 (50% 단축) | 보통 | 1h |
+| ☐ | M6-3-2 | PER/PBR 계산 벡터화 | `market_ratios.py`의 `iterrows()` 제거 → pandas 컬럼 연산으로 변경 → 3-5배 속도 개선 | 쉬움 | 30m |
+| ☐ | M6-3-3 | risk_flags 생성 벡터화 | `stage3_trap_detector.py`의 `apply(axis=1)` 부분 최적화 → 완전 벡터 연산 또는 numba 가능 | 보통 | 1h |
+
+**체크포인트**: 전체 파이프라인 실행 시간 20% 단축 확인, 특히 데이터 변환 단계 5초 이내 유지.
+
+#### M6-3-1: KRX 기본정보 중복 호출 제거
+
+**문제점:**
+```python
+# src/pipeline/runner.py 현재 흐름
+tickers = fetch_ticker_list(query_date)  # KRX API: stk_isu_base_info, ksq_isu_base_info
+listing_info = fetch_stock_listing_info(query_date)  # 동일 API 재호출
+```
+
+- `fetch_ticker_list()`이 이미 `ISU_SRT_CD`, `ISU_ABBRV`, `LIST_DD`, `LIST_SHRS` 등 상장정보 반환
+- `fetch_stock_listing_info()`가 동일한 API(`stk_isu_base_info`, `ksq_isu_base_info`) 재호출
+- **결과**: 중복 API 호출 (2회 → 1회로 통합 가능)
+
+**해결책:**
+1. `krx_tickers.py`의 `fetch_ticker_list()` 반환 DataFrame에 `listing_date`, `shares_outstanding` 컬럼 추가
+2. `runner.py`에서 `fetch_stock_listing_info()` 호출 제거
+3. `fundamentals` 테이블 upsert 시 `tickers` DataFrame 직접 사용
+
+**구현 예시:**
+```python
+# src/collectors/krx_tickers.py
+def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
+    # ...
+    # 기존: stock_code, stock_name, market
+    # 변경: stock_code, stock_name, market, listing_date, shares_outstanding
+    # (LIST_DD, LIST_SHRS를 API에서 직접 추출)
+    return result[["stock_code", "stock_name", "market", "listing_date", "shares_outstanding"]]
+
+# src/pipeline/runner.py
+tickers = fetch_ticker_list(run_date)  # listing_date 포함됨
+# 제거: listing_info = fetch_stock_listing_info(run_date)
+```
+
+**예상 효과:**
+- KRX API 호출 2회 → 1회 (50% 감소)
+- 파이프라인 전체 실행 시간 ~10초 단축
+
 ---
 
-## Milestone 6-3: DART 배치 처리 최적화 (향후 개선)
+#### M6-3-2: PER/PBR 계산 로직 벡터화
+
+**문제점:**
+```python
+# src/collectors/market_ratios.py 현재 구현
+def calculate_market_ratios(prices_df, fundamentals_df):
+    results = []
+    for idx, row in prices_df.iterrows():  # 종목별 루프 (느림)
+        stock_code = row["stock_code"]
+        close = row["close"]
+        
+        fundamentals = fundamentals_df[fundamentals_df["stock_code"] == stock_code].iloc[0]
+        eps = fundamentals["eps"]
+        
+        per = close / eps if eps else None  # 스칼라 계산
+        results.append({"stock_code": stock_code, "per": per, ...})
+    
+    return pd.DataFrame(results)
+```
+
+- `iterrows()`로 한 줄씩 순회 → O(n) 느림
+- 각 `prices` 행마다 `fundamentals` 필터링 → O(n²) 복잡도
+
+**해결책:**
+```python
+# 벡터화된 구현
+def calculate_market_ratios(prices_df, fundamentals_df):
+    # merge로 한 번에 정렬
+    merged = prices_df.merge(
+        fundamentals_df[["stock_code", "eps", "bps", "dps"]],
+        on="stock_code",
+        how="left"
+    )
+    
+    # 벡터 연산 (numpy 기반, 매우 빠름)
+    merged["per"] = merged["close"] / merged["eps"]
+    merged["pbr"] = merged["close"] / merged["bps"]
+    merged["dividend_yield"] = (merged["dps"] / merged["close"] * 100)
+    
+    # NaN 처리
+    merged["per"] = merged["per"].where(merged["eps"].notna(), None)
+    merged["pbr"] = merged["pbr"].where(merged["bps"].notna(), None)
+    
+    return merged[["stock_code", "per", "pbr", "dividend_yield"]]
+```
+
+**예상 효과:**
+- 벡터화로 3-5배 속도 개선 (2,600 종목 기준: 800ms → 160ms)
+- 코드 가독성 향상
+
+---
+
+#### M6-3-3: Stage 3 risk_flags 벡터화
+
+**문제점:**
+```python
+# src/screening/stage3_trap_detector.py 현재 구현
+def is_value_trap(row):
+    flags = []
+    if row["roe"] < 0: flags.append("NEGATIVE_ROE")
+    if row["debt_to_equity"] > 3.0: flags.append("HIGH_DEBT")
+    # ... (10+ 조건 반복)
+    return " | ".join(flags) if flags else None
+
+# 느린 apply 호출
+trap_df["risk_flags"] = df.apply(is_value_trap, axis=1)
+```
+
+- `apply(axis=1)`은 행 기준 루프 → Python 인터프리터 오버헤드
+- 각 행마다 함수 호출 → 콜 스택 비용 존재
+
+**해결책:**
+
+옵션 A (완전 벡터화):
+```python
+def detect_risk_flags_vectorized(df):
+    """완전 벡터 연산으로 플래그 생성"""
+    flags = []
+    
+    # 각 조건을 Boolean 벡터로 생성
+    neg_roe = df["roe"] < 0
+    high_debt = df["debt_to_equity"] > 3.0
+    low_icr = df["interest_coverage"] < 1.5
+    # ... (더 많은 조건)
+    
+    # 조건별 플래그 텍스트 배열 생성
+    result = []
+    for i in range(len(df)):
+        row_flags = []
+        if neg_roe.iloc[i]: row_flags.append("NEGATIVE_ROE")
+        if high_debt.iloc[i]: row_flags.append("HIGH_DEBT")
+        if low_icr.iloc[i]: row_flags.append("LOW_ICR")
+        result.append(" | ".join(row_flags) if row_flags else None)
+    
+    return pd.Series(result, index=df.index)
+
+trap_df["risk_flags"] = detect_risk_flags_vectorized(df)
+```
+
+옵션 B (Numba 가속화, 더 빠름):
+```python
+import numba as nb
+import numpy as np
+
+@nb.jit(nopython=True)
+def _compute_flags_numba(roe, debt, icr):
+    """Numba로 JIT 컴파일된 플래그 계산"""
+    n = len(roe)
+    flags = np.zeros(n, dtype=object)
+    
+    for i in range(n):
+        flag_list = []
+        if roe[i] < 0: flag_list.append("NEGATIVE_ROE")
+        if debt[i] > 3.0: flag_list.append("HIGH_DEBT")
+        if icr[i] < 1.5: flag_list.append("LOW_ICR")
+        
+        if flag_list:
+            flags[i] = " | ".join(flag_list)
+        else:
+            flags[i] = None
+    
+    return flags
+```
+
+**예상 효과:**
+- 벡터화로 2-3배 속도 개선 (2,600 종목 기준: 400ms → 150ms)
+- Numba 사용 시 10배 이상 가능 (하지만 설정 복잡도 증가)
+
+---
+
+## Milestone 6-4: DART 배치 처리 최적화 (향후 개선)
 
 > 현재 M6-1-1~M6-1-3으로 충분한 성능 개선이 이뤄졌으므로, 추가 최적화는 투입 대비 효과 검증 후 진행.
 

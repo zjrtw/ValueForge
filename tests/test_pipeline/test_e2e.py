@@ -126,7 +126,6 @@ def _run_pipeline_no_upload(db_path: Path) -> dict:
     """외부 API를 모킹하고 upload=False로 파이프라인을 실행한다."""
     with (
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
-        patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
     ):
@@ -383,7 +382,6 @@ class E2EWithUploadTest(unittest.TestCase):
 
         with (
             patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
-            patch("src.pipeline.runner.fetch_stock_listing_info", return_value=pd.DataFrame()),
             patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
             patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
             patch("src.pipeline.runner.R2Uploader", side_effect=_get_mocked_uploader),
