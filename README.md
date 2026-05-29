@@ -273,6 +273,8 @@ ValueForge/
 | [docs/COST_ANALYSIS.md](docs/COST_ANALYSIS.md) | 비용 분석 |
 | [docs/FUTURE_UPGRADE.md](docs/FUTURE_UPGRADE.md) | 향후 개선 계획 |
 | [docs/TASKS.md](docs/TASKS.md) | 마일스톤 구현 태스크 |
+| [docs/DART_OPTIMIZATION.md](docs/DART_OPTIMIZATION.md) | DART API 캐싱 & 최적화 전략 |
+| [docs/PERFORMANCE_BENCHMARKS.md](docs/PERFORMANCE_BENCHMARKS.md) | 성능 벤치마크 & 최적화 실적 |
 
 ---
 
