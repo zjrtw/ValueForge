@@ -6,7 +6,6 @@ import yfinance as yf
 
 from src.collectors.krx_prices import (
     _empty_history_frame,
-    _empty_price_frame,
     _format_output_date,
     _normalize_query_date,
 )

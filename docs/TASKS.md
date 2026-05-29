@@ -163,7 +163,7 @@
 | ☑ | M6-1-1 | test.yml 병렬 실행 활성화 | pytest, mypy, ruff를 동시 실행 → ~35-40% 단축 | 쉬움 | 30m |
 | ☑ | M6-1-2 | daily_pipeline.yml Python 캐시 추가 | pip 캐시 활성화 → 의존성 설치 50-70% 단축 | 쉬움 | 20m |
 | ☑ | M6-1-3 | 파이프라인 API 호출 동시성 강화 | pykrx·opendartreader 멀티스레딩/비동기 적용 | 보통 | 2h |
-| ☐ | M6-1-4 | DART 배치 처리 최적화 | 종목별 개별 호출 → 배치 API 활용으로 통신 횟수 감축 | 보통 | 1.5h |
+| ☑ | M6-1-4 | DART API 캐싱 최적화 | fundamentals 테이블 TTL 기반 캐싱 + 스레드 세이프 quota 관리 → 반복 실행 시 API 호출 0으로 감축 | 보통 | 1.5h |
 
 **체크포인트**: test.yml < 5분, daily_pipeline.yml < 60분으로 단축 확인.
 
