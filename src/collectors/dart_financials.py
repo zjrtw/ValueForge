@@ -111,7 +111,11 @@ def fetch_financial_statements(
             return None
 
     code_year_pairs = [(code, year) for code in codes for year in fiscal_years]
-    rows = [r for r in parallel_map(_fetch_and_normalize, code_year_pairs, max_workers=2) if r is not None]
+    rows = [r for r in parallel_map(
+        _fetch_and_normalize,
+        code_year_pairs,
+        max_workers=settings.DART_MAX_WORKERS
+    ) if r is not None]
 
     result = pd.DataFrame(rows, columns=_fundamental_columns()) if rows else pd.DataFrame(columns=_fundamental_columns())
     log.info("dart financial collection complete", total=len(result), cached=len(cached_pairs))

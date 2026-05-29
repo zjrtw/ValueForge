@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     MARKETS: str = "KOSPI,KOSDAQ"
     LOG_LEVEL: str = "INFO"
     DB_PATH: str = "/tmp/valueforge.db"
+    DART_MAX_WORKERS: int = Field(default=4, ge=1, le=16)
 
 
 class ScreeningParams:
