@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     DB_PATH: str = "/tmp/valueforge.db"
     DART_MAX_WORKERS: int = Field(default=4, ge=1, le=16)
+    PRESERVE_DB: bool = Field(default=False)  # True: DB 유지 (운영), False: 삭제 (테스트)
 
 
 class ScreeningParams:
