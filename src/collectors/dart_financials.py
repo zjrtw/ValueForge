@@ -1,3 +1,4 @@
+import sqlite3
 from collections.abc import Iterable
 from datetime import date
 from typing import Any
@@ -31,6 +32,8 @@ _ACCOUNT_MAP = {
     "operating_cf": ("영업활동현금흐름", "영업활동으로 인한 현금흐름"),
     "capex": ("유형자산의 취득", "유형자산 취득"),
     "eps": ("기본주당이익", "기본주당순이익"),
+    "bps": ("주당순자산가치", "1주당 순자산"),
+    "dps": ("주당배당금", "현금배당금(보통주)"),
 }
 
 
@@ -40,10 +43,23 @@ def fetch_financial_statements(
     years: int = _DEFAULT_YEARS,
     base_year: int | None = None,
     client: Any | None = None,
+    conn: sqlite3.Connection | None = None,
+    cache_ttl_days: int = 30,
 ) -> pd.DataFrame:
     """DART annual financial statements for KOSPI/KOSDAQ stocks.
 
-    Returns rows shaped for Repository.upsert_fundamentals.
+    캐싱 지원: conn이 전달되면 TTL 이내 수집된 데이터는 API 호출 스킵.
+
+    Args:
+        tickers: 종목 리스트 (None시 자동 조회)
+        years: 회계년도 개수 (기본 3개년)
+        base_year: 기준년도 (None시 작년)
+        client: DART 클라이언트 (None시 자동 생성)
+        conn: SQLite 연결 (캐싱용, None시 캐싱 비활성화)
+        cache_ttl_days: 캐시 유효 기간(일, 기본 30)
+
+    Returns:
+        DART 재무제표 데이터프레임 (캐시 HIT시 해당 행 제외)
     """
     dart = client if client is not None else _create_dart_client()
     ticker_df = tickers if tickers is not None else fetch_ticker_list()
@@ -56,15 +72,33 @@ def fetch_financial_statements(
     target_year = base_year if base_year is not None else date.today().year - 1
     fiscal_years = list(range(target_year - years + 1, target_year + 1))
 
+    # 캐시 HIT 집합 계산 (conn이 있을 때만)
+    cached_pairs: set[tuple[str, int]] = set()
+    if conn is not None:
+        from src.db.repository import Repository
+
+        repo = Repository(conn)
+        cached_pairs = repo.get_cached_fundamental_pairs(codes, fiscal_years, cache_ttl_days)
+        if cached_pairs:
+            log.info(
+                "dart financial cache hit",
+                cached=len(cached_pairs),
+                total=len(codes) * len(fiscal_years),
+            )
+
     def _fetch_and_normalize(code_year: tuple[str, int]) -> dict[str, Any] | None:
         code, fiscal_year = code_year
-        if not _quota_tracker.can_call(1):
+
+        # 캐시 HIT: API 호출 스킵
+        if (code, fiscal_year) in cached_pairs:
+            return None
+
+        if not _quota_tracker.try_acquire(1):
             log.info("dart daily quota exhausted, skipping request", stock_code=code)
             return None
 
         try:
             raw = _fetch_raw_statement(dart, code, fiscal_year)
-            _quota_tracker.add_calls(1)
             normalized = normalize_financial_statement(raw, code, fiscal_year)
             return normalized
         except Exception as exc:
@@ -79,8 +113,8 @@ def fetch_financial_statements(
     code_year_pairs = [(code, year) for code in codes for year in fiscal_years]
     rows = [r for r in parallel_map(_fetch_and_normalize, code_year_pairs, max_workers=2) if r is not None]
 
-    result = pd.DataFrame(rows, columns=_fundamental_columns())
-    log.info("dart financial collection complete", total=len(result))
+    result = pd.DataFrame(rows, columns=_fundamental_columns()) if rows else pd.DataFrame(columns=_fundamental_columns())
+    log.info("dart financial collection complete", total=len(result), cached=len(cached_pairs))
     return result
 
 

@@ -161,7 +161,7 @@ def _collect(
 
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
-    fundamentals = fetch_financial_statements(tickers)
+    fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
