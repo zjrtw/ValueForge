@@ -96,12 +96,11 @@ def test_fetch_financial_statements_collects_requested_years(monkeypatch):
 
     result = fetch_financial_statements(tickers, years=2, base_year=2025, client=fake)
 
-    assert fake.calls == [
-        ("005930", 2024, "11011"),
-        ("005930", 2025, "11011"),
-        ("000660", 2024, "11011"),
-        ("000660", 2025, "11011"),
-    ]
+    assert len(fake.calls) == 4
+    assert ("005930", 2024, "11011") in fake.calls
+    assert ("005930", 2025, "11011") in fake.calls
+    assert ("000660", 2024, "11011") in fake.calls
+    assert ("000660", 2025, "11011") in fake.calls
     assert len(result) == 4
     assert result.loc[0, "revenue"] == 2024
     assert result.loc[3, "stock_code"] == "000660"

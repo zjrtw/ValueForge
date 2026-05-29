@@ -3,11 +3,9 @@ main            = "worker.js"
 compatibility_date = "2024-01-01"
 
 # ─── Cron 트리거 ───────────────────────────────────────────────────────────────
-# GitHub Actions 원래 스케줄: 0 8 * * 1-5 (08:00 UTC)
-# 이 Worker:                  30 8 * * 1-5 (08:30 UTC = 17:30 KST)
-# → GitHub Actions에 30분 여유를 주고, 미실행 시에만 백업 트리거
+# GitHub Actions 스케줄을 대신하여 17:00 KST (08:00 UTC)에 직접 트리거
 [triggers]
-crons = ["30 8 * * 1-5"]
+crons = ["0 8 * * 1-5"]
 
 # ─── Secrets (wrangler secret put 으로 등록) ───────────────────────────────────
 # GITHUB_PAT  : GitHub Personal Access Token

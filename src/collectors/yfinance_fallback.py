@@ -104,7 +104,7 @@ def _prepare_tickers(query_date: str, tickers: pd.DataFrame | None) -> pd.DataFr
     ticker_df["stock_code"] = ticker_df["stock_code"].astype(str).str.zfill(6)
     ticker_df["market"] = ticker_df["market"].astype(str).str.upper()
 
-    if settings.MAX_TICKERS > 0:
+    if tickers is None and settings.MAX_TICKERS > 0:
         ticker_df = ticker_df.head(settings.MAX_TICKERS)
         log.info("yfinance fallback count limited for testing", limit=settings.MAX_TICKERS)
 

@@ -1,9 +1,6 @@
 name: 일일 스크리닝 파이프라인
 
 on:
-  schedule:
-    # 17:00 KST = 08:00 UTC, 월~금
-    - cron: "0 8 * * 1-5"
   workflow_dispatch:
     inputs:
       date_override:

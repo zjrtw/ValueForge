@@ -56,7 +56,7 @@ def fetch_daily_price_data(
     result = pd.concat(frames, ignore_index=True)
     result.insert(1, "date", output_date)
 
-    if settings.MAX_TICKERS > 0:
+    if tickers is None and settings.MAX_TICKERS > 0:
         result = result.head(settings.MAX_TICKERS)
         log.info("daily price count limited for testing", limit=settings.MAX_TICKERS)
 
@@ -100,7 +100,7 @@ def fetch_avg_trading_value_20d(
     ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date)
     codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
 
-    if settings.MAX_TICKERS > 0:
+    if tickers is None and settings.MAX_TICKERS > 0:
         codes = codes[: settings.MAX_TICKERS]
         log.info("avg trading value count limited for testing", limit=settings.MAX_TICKERS)
 
@@ -142,7 +142,7 @@ def fetch_price_history_1y(
     ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date)
     codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
 
-    if settings.MAX_TICKERS > 0:
+    if tickers is None and settings.MAX_TICKERS > 0:
         codes = codes[: settings.MAX_TICKERS]
         log.info("price history count limited for testing", limit=settings.MAX_TICKERS)
 

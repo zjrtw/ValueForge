@@ -1,10 +1,9 @@
 /**
- * Cloudflare Workers — ValueForge 파이프라인 백업 스케줄러
+ * Cloudflare Workers — ValueForge 파이프라인 스케줄러 (전담)
  *
  * 동작:
- *   1. 매 영업일 08:30 UTC (17:30 KST) 실행
- *   2. GitHub Actions가 오늘 이미 성공/진행 중이면 → 스킵
- *   3. 오늘 실행 기록이 없으면 → workflow_dispatch 트리거
+ *   1. 매 영업일 08:00 UTC (17:00 KST) 실행
+ *   2. GitHub Actions의 workflow_dispatch API를 직접 호출하여 파이프라인 트리거
  */
 
 const REPO          = "zjrtw/ValueForge";
@@ -26,68 +25,13 @@ async function runScheduler(env) {
 
   // KST 기준 오늘 날짜
   const kstToday = getKstDate();
-  console.log(`[${kstToday}] 파이프라인 실행 여부 확인 중...`);
+  console.log(`[${kstToday}] Cloudflare 스케줄러: 파이프라인 실행 명령 전송 중...`);
 
   try {
-    const alreadyRan = await checkTodayRun(PAT, kstToday);
-
-    if (alreadyRan) {
-      console.log(`[${kstToday}] 이미 실행됨 → 스킵`);
-      return;
-    }
-
-    console.log(`[${kstToday}] 오늘 실행 기록 없음 → 트리거`);
     await triggerWorkflow(PAT, kstToday);
-
   } catch (err) {
     console.error(`[${kstToday}] 오류: ${err.message}`);
   }
-}
-
-/**
- * 오늘(KST) 실행된 run 중 성공·진행 중인 것이 있는지 확인
- * @returns {Promise<boolean>}
- */
-async function checkTodayRun(pat, kstToday) {
-  const url =
-    `https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/runs?per_page=10`;
-
-  const res = await ghFetch(url, pat);
-
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`GitHub API 조회 실패 (${res.status}): ${body}`);
-  }
-
-  const { workflow_runs } = await res.json();
-
-  const todayRuns = workflow_runs.filter((run) => {
-    const runKst = new Date(new Date(run.created_at).getTime() + KST_OFFSET_MS);
-    return runKst.toISOString().slice(0, 10) === kstToday;
-  });
-
-  if (todayRuns.length === 0) {
-    console.log(`[${kstToday}] 오늘 실행 기록 없음`);
-    return false;
-  }
-
-  // 상태별 요약 로그
-  for (const run of todayRuns) {
-    console.log(
-      `[${kstToday}] run #${run.id}: status=${run.status}, conclusion=${run.conclusion ?? "—"}, event=${run.event}`
-    );
-  }
-
-  // 성공했거나 현재 진행 중이면 트리거 불필요
-  const shouldSkip = todayRuns.some(
-    (r) =>
-      r.conclusion === "success" ||
-      r.status   === "in_progress" ||
-      r.status   === "queued" ||
-      r.status   === "waiting"
-  );
-
-  return shouldSkip;
 }
 
 /**
@@ -104,7 +48,7 @@ async function triggerWorkflow(pat, kstToday) {
 
   // 204 No Content = 성공
   if (res.status === 204 || res.ok) {
-    console.log(`[${kstToday}] ✅ 파이프라인 트리거 성공`);
+    console.log(`[${kstToday}] ✅ GitHub Actions 파이프라인 트리거 성공`);
   } else {
     const body = await res.text();
     throw new Error(`트리거 실패 (${res.status}): ${body}`);
