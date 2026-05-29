@@ -18,6 +18,7 @@
   - [Milestone 4: 파이프라인 오케스트레이션 \& R2 (10-11일차)](#milestone-4-파이프라인-오케스트레이션--r2-10-11일차)
   - [Milestone 5: Streamlit 대시보드 (12-15일차)](#milestone-5-streamlit-대시보드-12-15일차)
   - [Milestone 6: 자동화 \& 배포 (16-17일차)](#milestone-6-자동화--배포-16-17일차)
+  - [Milestone 7: KRX 인증 방식 전환 (pykrx → 공식 Open API)](#milestone-7-krx-인증-방식-전환-pykrx--공식-open-api)
   - [구현 우선순위 원칙](#구현-우선순위-원칙)
   - [관련 문서](#관련-문서)
 
@@ -34,8 +35,10 @@
 | M4: 파이프라인 오케스트레이션 & R2 | 10-11일차 | 20h | 100.5h |
 | M5: Streamlit 대시보드 | 12-15일차 | 23h | 123.5h |
 | M6: 자동화 & 배포 | 16-17일차 | 11h | 134.5h |
+| M7: KRX 인증 방식 전환 | 18-20일차 | 15h | 149.5h |
 
-**총 MVP 예상 시간: 약 134시간 (1인 개발자 기준 3-4주, 하루 5-6시간)**
+**총 MVP 예상 시간: 약 134시간 (1인 개발자 기준 3-4주, 하루 5-6시간)**  
+**M7 포함 총 시간: 약 149.5시간**
 
 ---
 
@@ -231,6 +234,84 @@ class Repository:
         """재무 데이터 캐시에 저장"""
         # financials 테이블에 저장
 ```
+
+---
+
+## Milestone 7: KRX 인증 방식 전환 (pykrx → 공식 Open API)
+
+> **배경**: KRX가 `data.krx.co.kr` 직접 접근에 로그인을 요구하면서 비공식 스크래핑 기반의 `pykrx`가 불안정해졌다.  
+> 공식 Open API(`openapi.krx.co.kr`)는 `AUTH_KEY` 헤더 인증 방식으로 동일한 데이터를 안정적으로 제공한다.  
+> 수집 전략도 **종목별 기간 조회 → 날짜별 전체 시장 스냅샷** 방식으로 전환하여 API 호출 수를 줄인다.
+
+### API 매핑 요약
+
+| 현재 pykrx 함수 | 대체 엔드포인트 | Base URL |
+|---|---|---|
+| `get_market_ticker_list()` + 상장 정보 | `/stk_isu_base_info`, `/ksq_isu_base_info` | `https://data-dbg.krx.co.kr/svc/apis/sto` |
+| `get_market_ohlcv_by_ticker()` | `/stk_bydd_trd`, `/ksq_bydd_trd` | 동일 |
+| `get_market_cap_by_ticker()` | `/stk_bydd_trd` (`MKTCAP` 필드 포함) | 동일 |
+| `get_market_fundamental_by_ticker()` | `/stk_bydd_trd` (`PER`, `PBR` 포함 확인, `DIV_YD` 검증 필요) | 동일 |
+| `get_market_ohlcv(start, end, ticker)` | 날짜별 `/stk_bydd_trd` 반복 호출 후 피벗 | 동일 |
+
+### 1년 이력 수집 전략 변경
+
+```
+현재 (pykrx):  종목별 1회 기간 조회  →  2,000 종목 × 1회  =  2,000 API 호출
+변경 (Open API): 날짜별 전체 시장 조회 →  252 거래일 × 1회  =    252 API 호출  (↓87%)
+```
+
+| Done | ID | 작업 | 설명 | 의존성 | 난이도 | 시간 |
+|---|---|---|---|---|---|---|
+| ☑ | M7-1 | KRX Open API 클라이언트 구현 | `src/collectors/krx_client.py` 신설. `AUTH_KEY` 헤더 주입, JSON 응답 파싱, rate limiting, 재시도 래퍼 | M0 | 쉬움 | 1h |
+| ☑ | M7-2 | 배당수익률 포함 여부 검증 | `/stk_bydd_trd` 실제 호출로 `DIV_YD`(또는 동등 필드) 존재 확인. 미포함 시 별도 API 엔드포인트 식별 | M7-1 | 쉬움 | 30m |
+| ☑ | M7-3 | 종목 수집기 마이그레이션 | `krx_tickers.py`: pykrx 제거 → `/stk_isu_base_info` + `/ksq_isu_base_info`. `LIST_DD`(상장일), `LIST_SHRS`(상장주식수) 매핑 | M7-1 | 보통 | 2h |
+| ☐ | M7-4 | 일별 가격 수집기 마이그레이션 | `krx_prices.py`: `/stk_bydd_trd`, `/ksq_bydd_trd`. `TDD_CLSPRC`→close, `ACC_TRDVAL`→trading_value, `MKTCAP`, `PER`, `PBR`, 배당수익률(M7-2 결과 반영) 컬럼 매핑 | M7-1, M7-2 | 보통 | 3h |
+| ☐ | M7-5 | 1년 이력 수집 재설계 | `fetch_price_history_1y()`, `fetch_avg_trading_value_20d()` 재구현. 날짜별 전체 시장 조회 후 피벗. 기존 `parallel_map(ticker별)` → `sequential(날짜별)` 전환 | M7-4 | 보통 | 2h |
+| ☐ | M7-6 | 설정 및 의존성 업데이트 | `settings.py`에 `KRX_AUTH_KEY` 추가, `.env.example` 반영, `docs/ENV_VARS.md` 업데이트, `requirements.txt`에서 `pykrx` 제거 | M7-3, M7-4 | 쉬움 | 30m |
+| ☐ | M7-7 | 수집기 테스트 업데이트 | `tests/test_collectors/` mock 전략 변경: `pykrx.stock.*` → `requests.get` 응답 모킹(`responses` 라이브러리 또는 `unittest.mock`). 기존 테스트 케이스 유지 | M7-3 ~ M7-5 | 보통 | 2h |
+| ☐ | M7-8 | DART BPS/DPS 계정명 추가 | `dart_financials.py`의 `_ACCOUNT_MAP`에 누락 항목 추가: `"bps": ("주당순자산가치", "1주당 순자산")`, `"dps": ("주당배당금", "현금배당금(보통주)")`. `fundamentals` 테이블 컬럼은 이미 존재하므로 수집 로직만 보완 | M0 | 쉬움 | 1h |
+| ☐ | M7-9 | 시장 배수 계산기 구현 | `src/collectors/market_ratios.py` 신설. `prices.close` + `fundamentals.eps/bps/dps` → `per/pbr/dividend_yield` 계산 후 `prices` 테이블 갱신. 파이프라인 runner에 DART·KRX 수집 완료 후 단계로 추가 | M7-4, M7-8 | 보통 | 2h |
+| ☐ | M7-10 | 시장 배수 계산 테스트 | 합성 데이터(prices + fundamentals)로 `market_ratios.py` 단위 테스트. 엣지 케이스: eps=0, bps=None, dps 누락 시 None 처리 검증 | M7-9 | 쉬움 | 1h |
+
+### M7-2 검증 결과 요약
+
+> **KRX Open API `stk_bydd_trd` 응답 필드 (실측)**
+
+| 필드 | 설명 | 비고 |
+|---|---|---|
+| `BAS_DD` | 기준일자 | |
+| `ISU_CD` | 종목코드 | |
+| `ISU_NM` | 종목명 | |
+| `MKT_NM` | 시장명 (KOSPI/KOSDAQ) | |
+| `SECT_TP_NM` | 섹터명 | |
+| `TDD_CLSPRC` | 종가 | |
+| `TDD_OPNPRC` | 시가 | |
+| `TDD_HGPRC` | 고가 | |
+| `TDD_LWPRC` | 저가 | |
+| `ACC_TRDVOL` | 거래량 | |
+| `ACC_TRDVAL` | 거래대금 | |
+| `MKTCAP` | 시가총액 | |
+| `LIST_SHRS` | 상장주식수 | `stk_isu_base_info`와 중복 제공 |
+| `CMPPREVDD_PRC` | 전일대비 | |
+| `FLUC_RT` | 등락률 | |
+| ~~PER~~ | | **미제공** |
+| ~~PBR~~ | | **미제공** |
+| ~~배당수익률~~ | | **미제공** |
+
+> **`stk_isu_base_info` 응답 필드** (`basDd` 파라미터 필수)
+
+| 필드 | 설명 |
+|---|---|
+| `ISU_SRT_CD` | 단축코드 (6자리) |
+| `ISU_NM` / `ISU_ABBRV` | 종목명 / 약칭 |
+| `LIST_DD` | 상장일 (YYYY/MM/DD) |
+| `LIST_SHRS` | 상장주식수 |
+| `MKT_TP_NM` | 시장구분 |
+| `PARVAL` | 액면가 |
+
+> **결론**: PER/PBR/배당수익률은 KRX Open API 미제공. DART `eps`/`bps`/`dps` + KRX `close`로 자체 계산 (M7-8~M7-10).
+
+**체크포인트**: `MAX_TICKERS=50 python -m src.pipeline.runner --date today` 후 pykrx 관련 import 없이 50개 종목 데이터 정상 수집 확인.
 
 ---
 

@@ -2,6 +2,7 @@
 pykrx>=1.0.47
 opendartreader>=0.3.2
 yfinance>=0.2.40
+requests>=2.31.0
 
 # 데이터 처리
 pandas>=2.2.0
