@@ -18,9 +18,15 @@ _VALID_MARKETS = {"KOSPI", "KOSDAQ"}
 def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
     """KOSPI·KOSDAQ 전 종목 코드·종목명·시장·상장주식수를 반환.
 
+    기준일 데이터가 없으면 자동으로 이전 거래일 재시도 (KRX API T+1~T+2 지연 대응).
+
     Returns:
         columns: stock_code, stock_name, market, shares_outstanding
     """
+    from datetime import timedelta
+
+    from src.utils.market_calendar import prev_trading_day
+
     bas_dd = _normalize_date(base_date)
     rows: list[dict] = []
 
@@ -31,6 +37,17 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
         except Exception as exc:
             log.warning("krx ticker list fetch failed", market=market, error=str(exc))
             continue
+
+        # KRX API에서 결과 없으면 이전 거래일로 재시도
+        if not items:
+            try:
+                prev_date_obj = prev_trading_day(date.fromisoformat(bas_dd[:4] + "-" + bas_dd[4:6] + "-" + bas_dd[6:8]) - timedelta(days=1))
+                prev_bas_dd = prev_date_obj.strftime("%Y%m%d")
+                log.info("krx ticker list empty, retrying with previous trading day", endpoint=endpoint, original=bas_dd, retry=prev_bas_dd)
+                items = fetch_issue_base_info(endpoint, prev_bas_dd)
+            except Exception as exc:
+                log.warning("krx ticker list fetch failed on retry", market=market, error=str(exc))
+                items = []
 
         for item in items:
             code = _parse_code(item.get("ISU_SRT_CD"))

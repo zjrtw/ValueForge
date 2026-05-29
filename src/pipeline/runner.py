@@ -17,9 +17,10 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
+from src.collectors.dart_financials import fetch_financial_statements
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_stock_listing_info, fetch_ticker_list
+from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
@@ -167,14 +168,17 @@ def _collect(
     else:
         log.warning("collect_fundamentals_empty")
 
-    # 5. DART 회사 메타데이터 (listing_date, industry) — stocks 테이블 보강
-    log.info("collect_company_metadata_start")
-    company_meta = fetch_company_metadata(tickers)
-    if not company_meta.empty:
-        repo.update_stock_metadata(company_meta)
-        log.info("collect_company_metadata_done", count=len(company_meta))
+    # 4. 시장 배수 계산 (PER, PBR, 배당수익률)
+    if not prices.empty and not fundamentals.empty:
+        log.info("calculate_market_ratios_start")
+        ratios = calculate_market_ratios(prices, fundamentals)
+        if not ratios.empty:
+            repo.update_prices_ratios(ratios)
+            log.info("calculate_market_ratios_done", count=len(ratios))
+        else:
+            log.warning("calculate_market_ratios_empty")
     else:
-        log.warning("collect_company_metadata_empty")
+        log.warning("calculate_market_ratios_skipped", prices_empty=prices.empty, fundamentals_empty=fundamentals.empty)
 
     return tickers, n_collected, n_errors
 
