@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, cast
 
 
 def parallel_map[T, R](
@@ -24,7 +25,7 @@ def parallel_map[T, R](
         함수 실행 결과 (원래 순서대로)
     """
     items_list = list(items)
-    results = [None] * len(items_list)
+    results: list[Any] = [None] * len(items_list)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_idx = {executor.submit(func, item): i for i, item in enumerate(items_list)}
@@ -40,4 +41,4 @@ def parallel_map[T, R](
                 # Actually, the previous implementation re-raised.
                 raise exc
 
-    return iter(results)
+    return iter(cast(list[R], results))
