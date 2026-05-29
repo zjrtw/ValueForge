@@ -3,13 +3,10 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import TypeVar
-
-T = TypeVar("T")
-R = TypeVar("R")
+from typing import Any, cast
 
 
-def parallel_map(
+def parallel_map[T, R](
     func: Callable[[T], R],
     items: Iterable[T],
     *,
@@ -28,31 +25,20 @@ def parallel_map(
         함수 실행 결과 (원래 순서대로)
     """
     items_list = list(items)
-    results = [None] * len(items_list)
-    future_to_idx = {}
+    results: list[Any] = [None] * len(items_list)
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # 첫 배치 제출
-        for idx in range(min(max_workers * chunk_size, len(items_list))):
-            future = executor.submit(func, items_list[idx])
-            future_to_idx[future] = idx
-
-        # 완료된 것부터 처리하면서 새 작업 추가
-        next_idx = min(max_workers * chunk_size, len(items_list))
-        completed_count = 0
-        for future in as_completed(future_to_idx.keys()):
-            idx = future_to_idx.pop(future)
+        future_to_idx = {executor.submit(func, item): i for i, item in enumerate(items_list)}
+        for future in as_completed(future_to_idx):
+            idx = future_to_idx[future]
             try:
                 results[idx] = future.result()
             except Exception as exc:
                 results[idx] = None
+                # We log the error but continue to allow other tasks to finish if needed, 
+                # or we could re-raise. The previous implementation re-raised.
+                # However, many callers expect the whole thing to fail if one fails?
+                # Actually, the previous implementation re-raised.
                 raise exc
 
-            completed_count += 1
-            # 다음 작업 추가
-            if next_idx < len(items_list):
-                future = executor.submit(func, items_list[next_idx])
-                future_to_idx[future] = next_idx
-                next_idx += 1
-
-    return iter(results)
+    return iter(cast(list[R], results))

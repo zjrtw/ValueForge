@@ -1,18 +1,17 @@
 from datetime import date
-from typing import Any
 
 import pandas as pd
-from pykrx import stock
 
+from src.collectors.krx_client import fetch_issue_base_info
 from src.utils.config import settings
 from src.utils.logger import get_logger
-from src.utils.rate_limiter import RateLimiter
 
 log = get_logger(__name__)
 
-_MARKETS = ("KOSPI", "KOSDAQ")
-_rate_limiter = RateLimiter(min_delay_seconds=0.5)
-
+_MARKET_ENDPOINTS: dict[str, str] = {
+    "KOSPI": "stk_isu_base_info",
+    "KOSDAQ": "ksq_isu_base_info",
+}
 _VALID_MARKETS = {"KOSPI", "KOSDAQ"}
 
 
@@ -22,40 +21,26 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
     Returns:
         columns: stock_code, stock_name, market, shares_outstanding
     """
-    query_date = _normalize_date(base_date)
-
-    # 종목기본정보(MDCSTAT01901)에서 상장주식수 일괄 수집
-    stock_info = fetch_stock_listing_info()
-    shares_by_code = (
-        stock_info.set_index("stock_code")["shares_outstanding"].to_dict()
-        if not stock_info.empty
-        else {}
-    )
-
+    bas_dd = _normalize_date(base_date)
     rows: list[dict] = []
-    selected_markets = _selected_markets()
 
-    for market in selected_markets:
-        _rate_limiter.wait()
+    for market in _selected_markets():
+        endpoint = _MARKET_ENDPOINTS[market]
         try:
-            codes: list[str] = stock.get_market_ticker_list(date=query_date, market=market)
+            items = fetch_issue_base_info(endpoint, bas_dd)
         except Exception as exc:
             log.warning("krx ticker list fetch failed", market=market, error=str(exc))
             continue
 
-        for code in codes:
-            try:
-                name: str = stock.get_market_ticker_name(code)
-            except Exception as exc:
-                log.warning("krx ticker name fetch failed", code=code, error=str(exc))
-                name = code
-
-            padded = str(code).zfill(6)
+        for item in items:
+            code = _parse_code(item.get("ISU_SRT_CD"))
+            if not code:
+                continue
             rows.append({
-                "stock_code": padded,
-                "stock_name": name,
+                "stock_code": code,
+                "stock_name": item.get("ISU_ABBRV") or item.get("ISU_NM") or code,
                 "market": market,
-                "shares_outstanding": shares_by_code.get(padded),
+                "shares_outstanding": _parse_int(item.get("LIST_SHRS")),
             })
 
     df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market", "shares_outstanding"])
@@ -64,89 +49,83 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
         df = df.head(settings.MAX_TICKERS)
         log.info("ticker count limited for testing", limit=settings.MAX_TICKERS)
 
-    log.info("ticker collection complete", total=len(df), markets=",".join(selected_markets))
+    log.info("ticker collection complete", total=len(df), markets=",".join(_selected_markets()))
     return df
 
 
 def fetch_stock_listing_info() -> pd.DataFrame:
-    """KRX 종목기본정보(MDCSTAT01901)에서 전 종목 상장일·상장주식수를 일괄 수집.
-
-    pykrx 내부 클래스를 직접 사용한다. get_market_sector_classifications 대신
-    사용하는 이유: pykrx 1.2.8 기준 sector_classifications에 인코딩 버그 존재.
+    """전 종목 상장일·상장주식수를 반환.
 
     Returns:
-        columns: stock_code, listing_date (YYYY-MM-DD), shares_outstanding (int)
+        columns: stock_code, listing_date (YYYY-MM-DD), shares_outstanding
     """
+    bas_dd = _normalize_date(None)
+    rows: list[dict] = []
+
+    for market in ("KOSPI", "KOSDAQ"):
+        endpoint = _MARKET_ENDPOINTS[market]
+        try:
+            items = fetch_issue_base_info(endpoint, bas_dd)
+        except Exception as exc:
+            log.warning("krx listing info fetch failed", market=market, error=str(exc))
+            continue
+
+        for item in items:
+            code = _parse_code(item.get("ISU_SRT_CD"))
+            if not code:
+                continue
+            rows.append({
+                "stock_code": code,
+                "listing_date": _parse_listing_date(item.get("LIST_DD")),
+                "shares_outstanding": _parse_int(item.get("LIST_SHRS")),
+            })
+
+    result = pd.DataFrame(rows, columns=["stock_code", "listing_date", "shares_outstanding"])
+    log.info("listing info collection complete", total=len(result))
+    return result
+
+
+def _parse_code(raw: object) -> str:
+    """ISU_SRT_CD 값을 6자리 문자열로 정규화. 유효하지 않으면 빈 문자열 반환."""
+    if raw is None:
+        return ""
+    code = str(raw).strip().zfill(6)
+    return "" if code == "000000" or not code.isdigit() else code
+
+
+def _parse_int(raw: object) -> int | None:
+    """쉼표 포함 숫자 문자열을 int로 변환."""
+    if raw is None:
+        return None
     try:
-        import pykrx.website.krx.market.core as _core
-
-        # bld == MDCSTAT01901 인 클래스를 동적 탐색
-        fetcher: Any = None
-        for name in dir(_core):
-            obj = getattr(_core, name)
-            if isinstance(obj, type) and issubclass(obj, _core.KrxWebIo if hasattr(_core, "KrxWebIo") else object):
-                try:
-                    instance = obj()
-                    if hasattr(instance, "bld") and "01901" in str(instance.bld):
-                        fetcher = instance
-                        break
-                except Exception:
-                    continue
-
-        if fetcher is None:
-            log.warning("krx_listing_info_class_not_found")
-            return _empty_listing_frame()
-
-        _rate_limiter.wait()
-        df = fetcher.fetch(mktId="ALL")
-        if df.empty:
-            log.warning("krx_listing_info_empty_response")
-            return _empty_listing_frame()
-
-        # 필요 컬럼 추출: ISU_SRT_CD(종목코드), LIST_DD(상장일), LIST_SHRS(상장주식수)
-        needed = {"ISU_SRT_CD", "LIST_DD", "LIST_SHRS"}
-        if not needed.issubset(df.columns):
-            log.warning("krx_listing_info_missing_columns", columns=df.columns.tolist())
-            return _empty_listing_frame()
-
-        result = df[["ISU_SRT_CD", "LIST_DD", "LIST_SHRS"]].copy()
-        result.columns = ["stock_code", "listing_date_raw", "shares_outstanding"]
-        result["stock_code"] = result["stock_code"].astype(str).str.zfill(6)
-
-        # LIST_DD: "2008/09/23" → "2008-09-23"
-        result["listing_date"] = pd.to_datetime(
-            result["listing_date_raw"], format="%Y/%m/%d", errors="coerce"
-        ).dt.strftime("%Y-%m-%d")
-
-        result["shares_outstanding"] = pd.to_numeric(
-            result["shares_outstanding"].astype(str).str.replace(",", ""),
-            errors="coerce",
-        ).astype("Int64")
-
-        result = result[["stock_code", "listing_date", "shares_outstanding"]].dropna(subset=["stock_code"])
-        log.info("krx_listing_info_collected", count=len(result))
-        return result.reset_index(drop=True)
-
-    except Exception as exc:
-        log.warning("krx_listing_info_failed", error=str(exc))
-        return _empty_listing_frame()
+        return int(str(raw).replace(",", "").strip())
+    except (ValueError, AttributeError):
+        return None
 
 
-def _empty_listing_frame() -> pd.DataFrame:
-    return pd.DataFrame(columns=["stock_code", "listing_date", "shares_outstanding"])
+def _parse_listing_date(raw: object) -> str | None:
+    """LIST_DD를 YYYY-MM-DD 형식으로 정규화.
+
+    KRX API 포맷: 'YYYYMMDD' 또는 'YYYY/MM/DD'
+    """
+    if raw is None:
+        return None
+    digits = str(raw).strip().replace("/", "").replace("-", "")
+    if len(digits) != 8 or not digits.isdigit():
+        return None
+    return f"{digits[:4]}-{digits[4:6]}-{digits[6:8]}"
 
 
 def _selected_markets() -> list[str]:
-    raw_markets = settings.MARKETS.strip()
-    if raw_markets.upper() in {"ALL", "BOTH"}:
+    raw = settings.MARKETS.strip()
+    if raw.upper() in {"ALL", "BOTH"}:
         return ["KOSPI", "KOSDAQ"]
-
-    markets = [market.strip().upper() for market in raw_markets.split(",") if market.strip()]
-    invalid = [market for market in markets if market not in _VALID_MARKETS]
+    markets = [m.strip().upper() for m in raw.split(",") if m.strip()]
+    invalid = [m for m in markets if m not in _VALID_MARKETS]
     if invalid or not markets:
-        valid_values = "KOSPI, KOSDAQ, KOSPI,KOSDAQ, ALL"
-        raise ValueError(f"Invalid MARKETS value: {settings.MARKETS}. Use one of: {valid_values}")
-
+        raise ValueError(
+            f"Invalid MARKETS value: {settings.MARKETS!r}. Use one of: KOSPI, KOSDAQ, KOSPI,KOSDAQ, ALL"
+        )
     return list(dict.fromkeys(markets))
 
 

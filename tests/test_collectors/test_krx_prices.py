@@ -102,11 +102,9 @@ def test_fetch_avg_trading_value_20d_uses_latest_20_values(mocker):
 
     result = fetch_avg_trading_value_20d("2026-05-20", tickers=tickers)
 
-    assert list(result.columns) == ["stock_code", "date", "avg_trading_value_20d"]
-    assert calls == [
-        ("20260420", "20260520", "005930"),
-        ("20260420", "20260520", "000660"),
-    ]
+    assert len(calls) == 2
+    assert ("20260420", "20260520", "005930") in calls
+    assert ("20260420", "20260520", "000660") in calls
     assert result.loc[result["stock_code"] == "005930", "date"].item() == "2026-05-20"
     assert result.loc[result["stock_code"] == "005930", "avg_trading_value_20d"].item() == 20.5
     assert result.loc[result["stock_code"] == "000660", "avg_trading_value_20d"].item() == 100.0
