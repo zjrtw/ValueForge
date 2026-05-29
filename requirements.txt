@@ -1,5 +1,4 @@
 # 데이터 수집
-pykrx>=1.0.47
 opendartreader>=0.3.2
 yfinance>=0.2.40
 requests>=2.31.0

@@ -16,6 +16,7 @@ _ENV_VARS_MD = _ROOT / "docs" / "ENV_VARS.md"
 # Settings에 정의된 모든 환경 변수 (config.py 기준)
 _REQUIRED_VARS = {
     "DART_API_KEY",
+    "KRX_AUTH_KEY",
     "R2_ENDPOINT_URL",
     "R2_ACCESS_KEY_ID",
     "R2_SECRET_ACCESS_KEY",
@@ -24,8 +25,6 @@ _REQUIRED_VARS = {
     "MARKETS",
     "LOG_LEVEL",
     "DB_PATH",
-    "KRX_ID",
-    "KRX_PW",
 }
 
 # 실제 값이 없어야 하는 민감 변수

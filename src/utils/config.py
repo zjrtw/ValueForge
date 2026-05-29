@@ -19,12 +19,8 @@ class Settings(BaseSettings):
     # DART API
     DART_API_KEY: str = ""
 
-    # KRX Open API (인증키 방식)
+    # KRX Open API
     KRX_AUTH_KEY: str = ""
-
-    # KRX 정보데이터시스템 API (pykrx — M7 전환 전까지 유지)
-    KRX_ID: str = ""
-    KRX_PW: str = ""
 
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""
@@ -52,9 +48,4 @@ class ScreeningParams:
 
 settings = Settings()
 screening_params = ScreeningParams()
-
-if settings.KRX_ID:
-    os.environ.setdefault("KRX_ID", settings.KRX_ID)
-if settings.KRX_PW:
-    os.environ.setdefault("KRX_PW", settings.KRX_PW)
 

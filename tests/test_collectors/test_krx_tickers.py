@@ -162,3 +162,34 @@ def test_listing_shares_outstanding_is_integer(patch_api):
 
     non_null = result["shares_outstanding"].dropna()
     assert (non_null == non_null.astype(int)).all()
+
+
+# ── Auto-fallback (empty response retry) ─────────────────────────────────────
+
+def test_fetch_ticker_list_retries_on_empty_response(monkeypatch):
+    """기준일 데이터 없으면 자동으로 이전 거래일로 재시도한다."""
+    call_count = {"stk": 0, "ksq": 0}
+
+    def counting_fetch_issue_base_info(endpoint: str, bas_dd: str) -> list[dict]:
+        if "stk" in endpoint:
+            call_count["stk"] += 1
+            # 첫 호출(20260529)은 빈 응답, 두 번째(20260528)는 데이터 반환
+            if bas_dd == "20260529":
+                return []
+            return _FAKE_KOSPI
+        call_count["ksq"] += 1
+        # 첫 호출은 빈 응답, 재시도는 데이터 반환
+        if bas_dd == "20260529":
+            return []
+        return _FAKE_KOSDAQ
+
+    monkeypatch.setattr("src.collectors.krx_tickers.fetch_issue_base_info", counting_fetch_issue_base_info)
+
+    result = fetch_ticker_list("2026-05-29")
+
+    # 각 시장별 2회 호출 (초회 실패 + 재시도 성공)
+    assert call_count["stk"] == 2
+    assert call_count["ksq"] == 2
+    # 데이터는 정상 반환
+    assert not result.empty
+    assert len(result) == len(_FAKE_KOSPI) + len(_FAKE_KOSDAQ)

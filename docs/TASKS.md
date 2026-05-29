@@ -265,13 +265,13 @@ class Repository:
 | ☑ | M7-1 | KRX Open API 클라이언트 구현 | `src/collectors/krx_client.py` 신설. `AUTH_KEY` 헤더 주입, JSON 응답 파싱, rate limiting, 재시도 래퍼 | M0 | 쉬움 | 1h |
 | ☑ | M7-2 | 배당수익률 포함 여부 검증 | `/stk_bydd_trd` 실제 호출로 `DIV_YD`(또는 동등 필드) 존재 확인. 미포함 시 별도 API 엔드포인트 식별 | M7-1 | 쉬움 | 30m |
 | ☑ | M7-3 | 종목 수집기 마이그레이션 | `krx_tickers.py`: pykrx 제거 → `/stk_isu_base_info` + `/ksq_isu_base_info`. `LIST_DD`(상장일), `LIST_SHRS`(상장주식수) 매핑 | M7-1 | 보통 | 2h |
-| ☐ | M7-4 | 일별 가격 수집기 마이그레이션 | `krx_prices.py`: `/stk_bydd_trd`, `/ksq_bydd_trd`. `TDD_CLSPRC`→close, `ACC_TRDVAL`→trading_value, `MKTCAP`, `PER`, `PBR`, 배당수익률(M7-2 결과 반영) 컬럼 매핑 | M7-1, M7-2 | 보통 | 3h |
-| ☐ | M7-5 | 1년 이력 수집 재설계 | `fetch_price_history_1y()`, `fetch_avg_trading_value_20d()` 재구현. 날짜별 전체 시장 조회 후 피벗. 기존 `parallel_map(ticker별)` → `sequential(날짜별)` 전환 | M7-4 | 보통 | 2h |
-| ☐ | M7-6 | 설정 및 의존성 업데이트 | `settings.py`에 `KRX_AUTH_KEY` 추가, `.env.example` 반영, `docs/ENV_VARS.md` 업데이트, `requirements.txt`에서 `pykrx` 제거 | M7-3, M7-4 | 쉬움 | 30m |
-| ☐ | M7-7 | 수집기 테스트 업데이트 | `tests/test_collectors/` mock 전략 변경: `pykrx.stock.*` → `requests.get` 응답 모킹(`responses` 라이브러리 또는 `unittest.mock`). 기존 테스트 케이스 유지 | M7-3 ~ M7-5 | 보통 | 2h |
-| ☐ | M7-8 | DART BPS/DPS 계정명 추가 | `dart_financials.py`의 `_ACCOUNT_MAP`에 누락 항목 추가: `"bps": ("주당순자산가치", "1주당 순자산")`, `"dps": ("주당배당금", "현금배당금(보통주)")`. `fundamentals` 테이블 컬럼은 이미 존재하므로 수집 로직만 보완 | M0 | 쉬움 | 1h |
-| ☐ | M7-9 | 시장 배수 계산기 구현 | `src/collectors/market_ratios.py` 신설. `prices.close` + `fundamentals.eps/bps/dps` → `per/pbr/dividend_yield` 계산 후 `prices` 테이블 갱신. 파이프라인 runner에 DART·KRX 수집 완료 후 단계로 추가 | M7-4, M7-8 | 보통 | 2h |
-| ☐ | M7-10 | 시장 배수 계산 테스트 | 합성 데이터(prices + fundamentals)로 `market_ratios.py` 단위 테스트. 엣지 케이스: eps=0, bps=None, dps 누락 시 None 처리 검증 | M7-9 | 쉬움 | 1h |
+| ☑ | M7-4 | 일별 가격 수집기 마이그레이션 | `krx_prices.py`: `/stk_bydd_trd`, `/ksq_bydd_trd`. `TDD_CLSPRC`→close, `ACC_TRDVAL`→trading_value, `MKTCAP`, `PER`, `PBR`, 배당수익률(M7-2 결과 반영) 컬럼 매핑 | M7-1, M7-2 | 보통 | 3h |
+| ☑ | M7-5 | 1년 이력 수집 재설계 | `fetch_price_history_1y()`, `fetch_avg_trading_value_20d()` 재구현. 날짜별 전체 시장 조회 후 피벗. 기존 `parallel_map(ticker별)` → `sequential(날짜별)` 전환 | M7-4 | 보통 | 2h |
+| ☑ | M7-6 | 설정 및 의존성 업데이트 | `settings.py`에 `KRX_AUTH_KEY` 추가, `.env.example` 반영, `docs/ENV_VARS.md` 업데이트, `requirements.txt`에서 `pykrx` 제거 | M7-3, M7-4 | 쉬움 | 30m |
+| ☑ | M7-7 | 수집기 테스트 업데이트 | `tests/test_collectors/` mock 전략 변경: `pykrx.stock.*` → `requests.get` 응답 모킹(`responses` 라이브러리 또는 `unittest.mock`). 기존 테스트 케이스 유지 | M7-3 ~ M7-5 | 보통 | 2h |
+| ☑ | M7-8 | DART BPS/DPS 계정명 추가 | `dart_financials.py`의 `_ACCOUNT_MAP`에 누락 항목 추가: `"bps": ("주당순자산가치", "1주당 순자산")`, `"dps": ("주당배당금", "현금배당금(보통주)")`. `fundamentals` 테이블 컬럼은 이미 존재하므로 수집 로직만 보완 | M0 | 쉬움 | 1h |
+| ☑ | M7-9 | 시장 배수 계산기 구현 | `src/collectors/market_ratios.py` 신설. `prices.close` + `fundamentals.eps/bps/dps` → `per/pbr/dividend_yield` 계산 후 `prices` 테이블 갱신. 파이프라인 runner에 DART·KRX 수집 완료 후 단계로 추가 | M7-4, M7-8 | 보통 | 2h |
+| ☑ | M7-10 | 시장 배수 계산 테스트 | 합성 데이터(prices + fundamentals)로 `market_ratios.py` 단위 테스트. 엣지 케이스: eps=0, bps=None, dps 누락 시 None 처리 검증 | M7-9 | 쉬움 | 1h |
 
 ### M7-2 검증 결과 요약
 
