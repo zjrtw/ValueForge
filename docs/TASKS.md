@@ -153,6 +153,85 @@
 
 **체크포인트**: GitHub Actions에서 워크플로우 수동 트리거(`workflow_dispatch`) 후 R2에 파일 업로드 확인.
 
+### Milestone 6-1: GitHub Actions 성능 최적화
+
+| Done | ID | 설명 | 예상 효과 | 난이도 | 시간 |
+|---|---|---|---|---|---|
+| ☑ | M6-1-1 | test.yml 병렬 실행 활성화 | pytest, mypy, ruff를 동시 실행 → ~35-40% 단축 | 쉬움 | 30m |
+| ☑ | M6-1-2 | daily_pipeline.yml Python 캐시 추가 | pip 캐시 활성화 → 의존성 설치 50-70% 단축 | 쉬움 | 20m |
+| ☑ | M6-1-3 | 파이프라인 API 호출 동시성 강화 | pykrx·opendartreader 멀티스레딩/비동기 적용 | 보통 | 2h |
+| ☐ | M6-1-4 | DART 배치 처리 최적화 | 종목별 개별 호출 → 배치 API 활용으로 통신 횟수 감축 | 보통 | 1.5h |
+
+**체크포인트**: test.yml < 5분, daily_pipeline.yml < 60분으로 단축 확인.
+
+---
+
+## Milestone 6-2: DART 배치 처리 최적화 (향후 개선)
+
+> 현재 M6-1-1~M6-1-3으로 충분한 성능 개선이 이뤄졌으므로, 추가 최적화는 투입 대비 효과 검증 후 진행.
+
+### 배경
+- **현재 구조**: 종목별 × 연도별 개별 API 호출 → `dart.finstate(code, fiscal_year)`
+- **호출 횟수**: ~2,000 종목 × 3년 = ~6,000회/일
+- **제약**: opendartreader 라이브러리가 배치 호출 미지원 (DART API 자체 한계)
+
+### 가능한 최적화 방안 (우선순위)
+
+| 방안 | 설명 | 기술 | 예상 효과 | 난이도 | 비고 |
+|---|---|---|---|---|---|
+| **A. 공시 목록 필터링** | DART 공시 목록을 먼저 조회 → 실제 공시된 것만 `finstate()` 호출 | `opendartreader.filings()` | 10-20% | 보통 | 네트워크 왕복 1회 증가, 하지만 불필요 호출 감소 |
+| **B. 응답 캐싱** | 같은 (code, fiscal_year)의 응답을 로컬 캐시/DB 저장 → 재실행 시 API 호출 제거 | SQLite 캐시 테이블 추가 | 20-30% (재실행 시에만) | 쉬움 | 초회 실행엔 효과 없음, 반복 실행 시 의미 있음 |
+| **C. 응답 처리 최적화** | DataFrame 파싱/정규화 최적화 (메모리 효율, 벡터화) | pandas 최적화 | 5-10% | 어려움 | 이미 M6-1-3의 병렬화로 많이 개선됨 |
+| **D. 요청 순서 최적화** | 최신 연도부터 역순 요청 + 조기 종료 조건 추가 | 로직 수정 | 0-5% | 쉬움 | 미미한 효과 |
+
+### 권장 로드맵
+1. **즉시 (현재)**: M6-1-1~M6-1-3 완료 (병렬화 → 3-4배 단축)
+2. **1차 검증**: daily_pipeline.yml 실제 실행 → 소요 시간 측정
+3. **조건부 진행**:
+   - 소요시간 > 40분: **방안 A** (공시 목록 필터링) 먼저 적용
+   - 소요시간 < 40분: **방안 B** (캐싱) 적용 후 무시
+   - 소요시간 < 20분: 모든 최적화 완료, 유지보수 모드
+
+### 구현 스케치 (방안 A: 공시 목록 필터링)
+
+```python
+# src/collectors/dart_financials.py 개선안 (향후)
+
+def fetch_financial_statements(...):
+    dart = _create_dart_client()
+    codes = [...]
+    
+    # 1단계: 공시 목록 조회 (1회)
+    filings = dart.filings(start_date, end_date)  # 모든 공시 회사 목록
+    filed_codes = set(filings['stock_code'].unique())
+    
+    # 2단계: 필요한 것만 호출
+    code_year_pairs = [
+        (code, year) 
+        for code in codes 
+        for year in fiscal_years
+        if code in filed_codes  # 필터링 추가
+    ]
+    
+    # 3단계: 병렬 처리 (M6-1-3과 동일)
+    rows = list(parallel_map(_fetch_and_normalize, code_year_pairs, max_workers=2))
+```
+
+### 구현 스케치 (방안 B: 응답 캐싱)
+
+```python
+# src/db/repository.py에 캐시 메서드 추가 (향후)
+
+class Repository:
+    def get_cached_financial_statement(self, code: str, fiscal_year: int) -> dict | None:
+        """캐시에서 재무 데이터 조회"""
+        # financials 테이블에서 조회
+        
+    def cache_financial_statement(self, data: dict) -> None:
+        """재무 데이터 캐시에 저장"""
+        # financials 테이블에 저장
+```
+
 ---
 
 ## 구현 우선순위 원칙

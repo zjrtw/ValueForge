@@ -5,6 +5,7 @@ import pandas as pd
 from pykrx import stock
 
 from src.collectors.krx_tickers import fetch_ticker_list
+from src.utils.concurrent import parallel_map
 from src.utils.config import settings
 from src.utils.logger import get_logger
 from src.utils.rate_limiter import RateLimiter
@@ -103,23 +104,20 @@ def fetch_avg_trading_value_20d(
         codes = codes[: settings.MAX_TICKERS]
         log.info("avg trading value count limited for testing", limit=settings.MAX_TICKERS)
 
-    rows: list[dict] = []
-    for code in codes:
+    def _fetch_and_compute(code: str) -> dict | None:
         try:
             ohlcv = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
-        except Exception as exc:
-            log.warning("krx ohlcv history collection failed", stock_code=code, error=str(exc))
-            continue
-
-        avg_value = _compute_avg_trading_value(ohlcv, window=window)
-        rows.append(
-            {
+            avg_value = _compute_avg_trading_value(ohlcv, window=window)
+            return {
                 "stock_code": code,
                 "date": output_date,
                 "avg_trading_value_20d": avg_value,
             }
-        )
+        except Exception as exc:
+            log.warning("krx ohlcv history collection failed", stock_code=code, error=str(exc))
+            return None
 
+    rows = [r for r in parallel_map(_fetch_and_compute, codes, max_workers=4) if r is not None]
     result = pd.DataFrame(rows, columns=["stock_code", "date", "avg_trading_value_20d"])
     log.info("avg trading value collection complete", date=output_date, total=len(result))
     return result
@@ -148,17 +146,16 @@ def fetch_price_history_1y(
         codes = codes[: settings.MAX_TICKERS]
         log.info("price history count limited for testing", limit=settings.MAX_TICKERS)
 
-    frames: list[pd.DataFrame] = []
-    for code in codes:
+    def _fetch_and_normalize(code: str) -> pd.DataFrame | None:
         try:
             history = _rate_limiter.throttle(stock.get_market_ohlcv)(start_date, query_date, code)
+            normalized = _normalize_history_frame(history, stock_code=code, max_rows=max_rows_per_ticker)
+            return normalized if not normalized.empty else None
         except Exception as exc:
             log.warning("krx price history collection failed", stock_code=code, error=str(exc))
-            continue
+            return None
 
-        normalized = _normalize_history_frame(history, stock_code=code, max_rows=max_rows_per_ticker)
-        if not normalized.empty:
-            frames.append(normalized)
+    frames = [f for f in parallel_map(_fetch_and_normalize, codes, max_workers=4) if f is not None]
 
     if not frames:
         return _empty_history_frame()
