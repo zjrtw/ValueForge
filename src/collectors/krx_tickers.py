@@ -57,11 +57,12 @@ def fetch_ticker_list(base_date: str | None = None) -> pd.DataFrame:
                 "stock_code": code,
                 "stock_name": item.get("ISU_ABBRV") or item.get("ISU_NM") or code,
                 "market": market,
+                "sector": item.get("SECT_TP_NM") or "Unknown",
                 "listing_date": _parse_listing_date(item.get("LIST_DD")),
                 "shares_outstanding": _parse_int(item.get("LIST_SHRS")),
             })
 
-    df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market", "listing_date", "shares_outstanding"])
+    df = pd.DataFrame(rows, columns=["stock_code", "stock_name", "market", "sector", "listing_date", "shares_outstanding"])
 
     if settings.MAX_TICKERS > 0:
         df = df.head(settings.MAX_TICKERS)
