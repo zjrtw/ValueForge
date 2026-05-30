@@ -733,7 +733,7 @@ class Repository:
             return pd.DataFrame(columns=FUNDAMENTAL_COLUMNS)
 
         # (code, year) 쌍을 WHERE 절로 변환
-        conditions = " OR ".join([f"(stock_code = ? AND fiscal_year = ? AND fiscal_quarter = 0)"] * len(code_year_pairs))
+        conditions = " OR ".join(["(stock_code = ? AND fiscal_year = ? AND fiscal_quarter = 0)"] * len(code_year_pairs))
         params = []
         for code, year in code_year_pairs:
             params.extend([str(code).zfill(6), int(year)])
