@@ -99,8 +99,10 @@ def run_pipeline(
         log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
 
         # ── Phase 5: R2 업로드 ─────────────────────────────────────────────
-        if upload:
+        if upload and len(ranked) > 0:
             _upload(run_date, _db_path, ranked, stats)
+        elif upload and len(ranked) == 0:
+            log.warning("pipeline_skipped_upload_no_candidates", run_date=run_date.isoformat())
 
         return stats
 
