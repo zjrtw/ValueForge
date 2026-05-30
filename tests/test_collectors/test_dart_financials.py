@@ -202,7 +202,9 @@ def test_fetch_financial_statements_skips_cached_pairs(monkeypatch, tmp_path):
     assert ("005930", 2025, "11011") in fake.calls
     assert ("000660", 2024, "11011") in fake.calls
     assert ("000660", 2025, "11011") in fake.calls
-    # 결과는 새로 수집한 것만 반환 (캐시는 제외)
-    assert len(result) == 3
+    # 결과는 파이프라인 입력으로 쓰이므로 새 수집 데이터와 캐시 데이터를 함께 반환
+    assert len(result) == 4
+    assert (result["stock_code"] == "005930").any()
+    assert ((result["stock_code"] == "005930") & (result["fiscal_year"] == 2024)).any()
 
     conn.close()

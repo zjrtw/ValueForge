@@ -181,7 +181,7 @@
 | Done | ID | 설명 | 예상 효과 | 난이도 | 시간 |
 |---|---|---|---|---|---|
 | ☐ | M6-3-1 | KRX 기본정보 중복 호출 제거 | `fetch_ticker_list()`에 `listing_date` 정보 포함 → `fetch_stock_listing_info()` 제거 → KRX API 호출 2회 → 1회 (50% 단축) | 보통 | 1h |
-| ☐ | M6-3-2 | PER/PBR 계산 벡터화 | `market_ratios.py`의 `iterrows()` 제거 → pandas 컬럼 연산으로 변경 → 3-5배 속도 개선 | 쉬움 | 30m |
+| ☑ | M6-3-2 | PER/PBR 계산 벡터화 | `market_ratios.py`의 `iterrows()` 제거 → pandas 컬럼 연산으로 변경 → 3-5배 속도 개선 | 쉬움 | 30m |
 | ☐ | M6-3-3 | risk_flags 생성 벡터화 | `stage3_trap_detector.py`의 `apply(axis=1)` 부분 최적화 → 완전 벡터 연산 또는 numba 가능 | 보통 | 1h |
 
 **체크포인트**: 전체 파이프라인 실행 시간 20% 단축 확인, 특히 데이터 변환 단계 5초 이내 유지.
