@@ -59,7 +59,7 @@ def fetch_financial_statements(
         cache_ttl_days: 캐시 유효 기간(일, 기본 30)
 
     Returns:
-        DART 재무제표 데이터프레임 (캐시 HIT시 해당 행 제외)
+        DART 재무제표 데이터프레임 (새 수집 행 + 캐시 HIT 행)
     """
     dart = client if client is not None else _create_dart_client()
     ticker_df = tickers if tickers is not None else fetch_ticker_list()
@@ -111,13 +111,22 @@ def fetch_financial_statements(
             return None
 
     code_year_pairs = [(code, year) for code in codes for year in fiscal_years]
-    rows = [r for r in parallel_map(
+    new_rows = [r for r in parallel_map(
         _fetch_and_normalize,
         code_year_pairs,
         max_workers=settings.DART_MAX_WORKERS
     ) if r is not None]
 
-    result = pd.DataFrame(rows, columns=_fundamental_columns()) if rows else pd.DataFrame(columns=_fundamental_columns())
+    all_rows: list[dict[str, Any]] = new_rows
+    if conn is not None and cached_pairs:
+        from src.db.repository import Repository
+
+        repo = Repository(conn)
+        cached_df = repo.get_fundamentals_by_codes_years(list(cached_pairs))
+        if not cached_df.empty:
+            all_rows.extend(cached_df.to_dict(orient="records"))  # type: ignore
+
+    result = pd.DataFrame(all_rows, columns=_fundamental_columns()) if all_rows else pd.DataFrame(columns=_fundamental_columns())
     log.info("dart financial collection complete", total=len(result), cached=len(cached_pairs))
     return result
 

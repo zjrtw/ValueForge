@@ -1,6 +1,4 @@
 """시장 배수(PER, PBR, 배당수익률) 계산."""
-from typing import Any
-
 import pandas as pd
 
 from src.utils.logger import get_logger
@@ -34,22 +32,27 @@ def calculate_market_ratios(
         how="left",
     )
 
-    result_rows = []
-    for _, row in merged.iterrows():
-        close = _parse_numeric(row.get("close"))
-        eps = _parse_numeric(row.get("eps"))
-        bps = _parse_numeric(row.get("bps"))
-        dps = _parse_numeric(row.get("dps"))
+    # 배수 계산 (조건에 맞는 경우만)
+    merged["per"] = None
+    merged["pbr"] = None
+    merged["dividend_yield"] = None
 
-        result_rows.append({
-            "stock_code": row["stock_code"],
-            "date": row["date"],
-            "per": _calculate_ratio(close, eps),
-            "pbr": _calculate_ratio(close, bps),
-            "dividend_yield": _calculate_ratio(dps, close),
-        })
+    # 유효성 검증 조건
+    valid_per = (merged["eps"].notna()) & (merged["eps"] != 0) & (merged["close"] > 0)
+    valid_pbr = (merged["bps"].notna()) & (merged["bps"] != 0) & (merged["close"] > 0)
+    valid_div = (merged["dps"].notna()) & (merged["dps"] > 0) & (merged["close"] > 0)
 
-    result = pd.DataFrame(result_rows)
+    # 조건을 만족하는 행만 계산
+    merged.loc[valid_per, "per"] = merged.loc[valid_per, "close"] / merged.loc[valid_per, "eps"]
+    merged.loc[valid_pbr, "pbr"] = merged.loc[valid_pbr, "close"] / merged.loc[valid_pbr, "bps"]
+    merged.loc[valid_div, "dividend_yield"] = merged.loc[valid_div, "dps"] / merged.loc[valid_div, "close"]
+
+    # 계산 결과 음수 제거
+    merged.loc[merged["per"] <= 0, "per"] = None
+    merged.loc[merged["pbr"] <= 0, "pbr"] = None
+    merged.loc[merged["dividend_yield"] <= 0, "dividend_yield"] = None
+
+    result = merged[["stock_code", "date", "per", "pbr", "dividend_yield"]]
     log.info("market ratios calculation complete", total=len(result))
     return result
 
@@ -60,28 +63,13 @@ def _get_latest_fundamentals(fundamentals_df: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["stock_code", "eps", "bps", "dps"])
 
     latest = fundamentals_df.sort_values("fiscal_year").groupby("stock_code").tail(1)
-    return latest[["stock_code", "eps", "bps", "dps"]].reset_index(drop=True)
+    result = latest[["stock_code", "eps", "bps", "dps"]].reset_index(drop=True)
 
+    # 디버그
+    bps_valid = result["bps"].notna().sum()
+    log.info("debug_latest_fundamentals", total=len(result), bps_valid=bps_valid)
 
-def _calculate_ratio(numerator: float | None, denominator: float | None) -> float | None:
-    """배수 계산. 분자나 분모가 None이거나 0이면 None 반환."""
-    if numerator is None or denominator is None or denominator == 0:
-        return None
-    try:
-        ratio = float(numerator) / float(denominator)
-        return ratio if ratio > 0 else None
-    except (TypeError, ValueError):
-        return None
-
-
-def _parse_numeric(value: Any) -> float | None:
-    """값을 float로 파싱."""
-    if value is None:
-        return None
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
+    return result
 
 
 def _empty_ratios_frame() -> pd.DataFrame:

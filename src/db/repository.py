@@ -717,6 +717,36 @@ class Repository:
 
         return {(str(row[0]), int(row[1])) for row in rows}
 
+    def get_fundamentals_by_codes_years(
+        self,
+        code_year_pairs: list[tuple[str, int]],
+    ) -> pd.DataFrame:
+        """지정된 (stock_code, fiscal_year) 쌍의 재무 데이터를 조회한다.
+
+        Args:
+            code_year_pairs: (stock_code, fiscal_year) 튜플 리스트
+
+        Returns:
+            매칭되는 fundamentals 데이터
+        """
+        if not code_year_pairs:
+            return pd.DataFrame(columns=FUNDAMENTAL_COLUMNS)
+
+        # (code, year) 쌍을 WHERE 절로 변환
+        conditions = " OR ".join(["(stock_code = ? AND fiscal_year = ? AND fiscal_quarter = 0)"] * len(code_year_pairs))
+        params: list[str | int] = []
+        for code, year in code_year_pairs:
+            params.extend([str(code).zfill(6), int(year)])
+
+        query = f"""
+            SELECT {', '.join(FUNDAMENTAL_COLUMNS)}
+            FROM fundamentals
+            WHERE {conditions}
+            ORDER BY stock_code, fiscal_year DESC
+        """
+
+        return pd.read_sql_query(query, self.conn, params=tuple(params))
+
 
 def _records(
     rows: pd.DataFrame | Iterable[Mapping[str, Any]],

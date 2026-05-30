@@ -161,6 +161,8 @@ def _collect(
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
+        # bps가 없으면 자체 계산 (total_equity / shares_outstanding)
+        fundamentals = _calculate_missing_bps(fundamentals, tickers)
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
     else:
@@ -171,6 +173,11 @@ def _collect(
         log.info("calculate_market_ratios_start")
         ratios = calculate_market_ratios(prices, fundamentals)
         if not ratios.empty:
+            # 디버그: per/pbr 값 확인
+            per_not_null = ratios["per"].notna().sum()
+            pbr_not_null = ratios["pbr"].notna().sum()
+            log.info("calculate_market_ratios_debug", total=len(ratios), per_valid=per_not_null, pbr_valid=pbr_not_null)
+
             repo.update_prices_ratios(ratios)
             log.info("calculate_market_ratios_done", count=len(ratios))
         else:
@@ -298,6 +305,34 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
         pivot.columns = [f"{prefix}_yr{int(c)}" for c in pivot.columns]
         result = result.merge(pivot.reset_index(), on="stock_code", how="left")
 
+    return result
+
+
+def _calculate_missing_bps(
+    fundamentals: pd.DataFrame,
+    tickers: pd.DataFrame,
+) -> pd.DataFrame:
+    """bps(주당순자산)가 없으면 total_equity / shares_outstanding으로 계산한다."""
+    result = fundamentals.copy()
+
+    # bps가 없는 행 찾기
+    missing_bps = result["bps"].isna() & result["total_equity"].notna()
+    if not missing_bps.any():
+        return result
+
+    # tickers의 shares_outstanding merge
+    ticker_shares = tickers[["stock_code", "shares_outstanding"]].copy()
+    result = result.merge(ticker_shares, on="stock_code", how="left")
+
+    # bps 계산
+    result.loc[missing_bps, "bps"] = (
+        result.loc[missing_bps, "total_equity"] / result.loc[missing_bps, "shares_outstanding"]
+    )
+
+    # shares_outstanding 컬럼 제거 (fundamentals 테이블에는 필요 없음)
+    result = result.drop(columns=["shares_outstanding"], errors="ignore")
+
+    log.info("bps_calculated", calculated=missing_bps.sum())
     return result
 
 
