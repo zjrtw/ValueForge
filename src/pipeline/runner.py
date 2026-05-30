@@ -478,16 +478,20 @@ def _resolve_date(date_str: str | None) -> date:
 
 
 def _parse_args() -> argparse.Namespace:
+    import os
     parser = argparse.ArgumentParser(description="ValueForge 스크리닝 파이프라인")
     parser.add_argument(
         "--date",
         default="today",
         help="실행 기준일 (YYYY-MM-DD 또는 'today'). 기본값: today",
     )
+    # GitHub Actions(CI 환경)에서만 업로드, 로컬에서는 기본 비활성화
+    default_no_upload = not os.getenv("CI", "").lower() in ("true", "1")
     parser.add_argument(
         "--no-upload",
         action="store_true",
-        help="R2 업로드를 건너뛴다 (로컬 테스트용)",
+        default=default_no_upload,
+        help="R2 업로드를 건너뛴다 (로컬 테스트용, 기본값: True)",
     )
     parser.add_argument(
         "--db-path",
