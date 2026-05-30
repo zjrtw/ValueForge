@@ -260,9 +260,9 @@ def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
             "volume": _parse_numeric(item.get("ACC_TRDVOL")),
             "trading_value": _parse_numeric(item.get("ACC_TRDVAL")),
             "market_cap": _parse_numeric(item.get("MKTCAP")),
-            "per": None,
-            "pbr": None,
-            "dividend_yield": None,
+            "per": _parse_numeric(item.get("PER")),
+            "pbr": _parse_numeric(item.get("PBR")),
+            "dividend_yield": _parse_numeric(item.get("DIV_YD")),
             "market": market.upper(),
         })
 

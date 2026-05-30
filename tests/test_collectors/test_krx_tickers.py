@@ -8,14 +8,14 @@ from src.collectors.krx_tickers import fetch_ticker_list
 
 # KRX Open API stk_isu_base_info / ksq_isu_base_info 응답 형식
 _FAKE_KOSPI = [
-    {"ISU_SRT_CD": "005930", "ISU_NM": "삼성전자보통주", "ISU_ABBRV": "삼성전자",  "LIST_DD": "19750611", "LIST_SHRS": "5969782550"},
-    {"ISU_SRT_CD": "000660", "ISU_NM": "SK하이닉스보통주", "ISU_ABBRV": "SK하이닉스", "LIST_DD": "19960326", "LIST_SHRS": "728002365"},
-    {"ISU_SRT_CD": "051910", "ISU_NM": "LG화학보통주",   "ISU_ABBRV": "LG화학",    "LIST_DD": "20010714", "LIST_SHRS": "70592343"},
+    {"ISU_SRT_CD": "005930", "ISU_NM": "삼성전자보통주", "ISU_ABBRV": "삼성전자",  "LIST_DD": "19750611", "LIST_SHRS": "5969782550", "SECT_TP_NM": "반도체"},
+    {"ISU_SRT_CD": "000660", "ISU_NM": "SK하이닉스보통주", "ISU_ABBRV": "SK하이닉스", "LIST_DD": "19960326", "LIST_SHRS": "728002365", "SECT_TP_NM": "반도체"},
+    {"ISU_SRT_CD": "051910", "ISU_NM": "LG화학보통주",   "ISU_ABBRV": "LG화학",    "LIST_DD": "20010714", "LIST_SHRS": "70592343", "SECT_TP_NM": "화학"},
 ]
 _FAKE_KOSDAQ = [
-    {"ISU_SRT_CD": "091990", "ISU_NM": "셀트리온헬스케어보통주", "ISU_ABBRV": "셀트리온헬스케어", "LIST_DD": "20120229", "LIST_SHRS": "130628849"},
-    {"ISU_SRT_CD": "263750", "ISU_NM": "펄어비스보통주",         "ISU_ABBRV": "펄어비스",         "LIST_DD": "20170904", "LIST_SHRS": "18576213"},
-    {"ISU_SRT_CD": "035900", "ISU_NM": "JYP Ent.보통주",        "ISU_ABBRV": "JYP Ent.",        "LIST_DD": "20010115", "LIST_SHRS": "74845685"},
+    {"ISU_SRT_CD": "091990", "ISU_NM": "셀트리온헬스케어보통주", "ISU_ABBRV": "셀트리온헬스케어", "LIST_DD": "20120229", "LIST_SHRS": "130628849", "SECT_TP_NM": "의약품"},
+    {"ISU_SRT_CD": "263750", "ISU_NM": "펄어비스보통주",         "ISU_ABBRV": "펄어비스",         "LIST_DD": "20170904", "LIST_SHRS": "18576213", "SECT_TP_NM": "게임"},
+    {"ISU_SRT_CD": "035900", "ISU_NM": "JYP Ent.보통주",        "ISU_ABBRV": "JYP Ent.",        "LIST_DD": "20010115", "LIST_SHRS": "74845685", "SECT_TP_NM": "엔터테인먼트"},
 ]
 
 
@@ -45,7 +45,7 @@ def test_returns_kospi_and_kosdaq(patch_api):
     result = fetch_ticker_list()
 
     assert not result.empty
-    assert list(result.columns) == ["stock_code", "stock_name", "market", "listing_date", "shares_outstanding"]
+    assert list(result.columns) == ["stock_code", "stock_name", "market", "sector", "listing_date", "shares_outstanding"]
     assert len(result[result["market"] == "KOSPI"]) == len(_FAKE_KOSPI)
     assert len(result[result["market"] == "KOSDAQ"]) == len(_FAKE_KOSDAQ)
 
