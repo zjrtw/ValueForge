@@ -1,12 +1,15 @@
 """종목 상세 페이지 — 점수 레이더, 리스크 플래그, 재무 테이블, 주가 차트."""
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from src.ui.components.radar_chart import render_radar
 from src.ui.data_loader import load_rankings, load_stock_detail
+from src.ui.metric_guides import metric_help
 
 _RADAR_DIMS = [
     ("value_score", "가치"),
@@ -102,6 +105,15 @@ def format_risk_flags(df: pd.DataFrame) -> pd.DataFrame:
     return result[["위험등급", "유형", "설명", "측정값", "임계값"]]
 
 
+def build_fundamental_column_config(columns: list[str]) -> dict[str, Any]:
+    """재무 테이블 컬럼별 도움말 설정을 만든다."""
+    return {
+        col: st.column_config.Column(col, help=help_text)
+        for col in columns
+        if (help_text := metric_help(col))
+    }
+
+
 def build_price_fig(prices_df: pd.DataFrame) -> go.Figure:
     """주가 데이터로 Plotly 라인 차트를 생성한다."""
     df = prices_df.sort_values("date")
@@ -173,7 +185,7 @@ def render(stock_code: str | None = None) -> None:
             st.rerun()
 
     if composite is not None:
-        st.metric("종합점수", f"{composite:.1f}")
+        st.metric("종합점수", f"{composite:.1f}", help=metric_help("종합점수"))
 
     st.divider()
 
@@ -202,7 +214,12 @@ def render(stock_code: str | None = None) -> None:
     st.subheader("재무 현황 (억 원)")
     if not fundamentals_df.empty:
         fmt_fund = format_fundamentals(fundamentals_df)
-        st.dataframe(fmt_fund, use_container_width=True, hide_index=True)
+        st.dataframe(
+            fmt_fund,
+            use_container_width=True,
+            hide_index=True,
+            column_config=build_fundamental_column_config(fmt_fund.columns.tolist()),
+        )
     else:
         st.info("재무 데이터 없음")
 
@@ -217,7 +234,15 @@ def render(stock_code: str | None = None) -> None:
         latest = prices_df.sort_values("date").iloc[-1]
         c1, c2, c3 = st.columns(3)
         c1.metric("현재가", f"{latest['close']:,.0f}원")
-        c2.metric("PER", f"{latest['per']:.1f}" if pd.notna(latest.get("per")) else "—")
-        c3.metric("PBR", f"{latest['pbr']:.2f}" if pd.notna(latest.get("pbr")) else "—")
+        c2.metric(
+            "PER",
+            f"{latest['per']:.1f}" if pd.notna(latest.get("per")) else "—",
+            help=metric_help("PER"),
+        )
+        c3.metric(
+            "PBR",
+            f"{latest['pbr']:.2f}" if pd.notna(latest.get("pbr")) else "—",
+            help=metric_help("PBR"),
+        )
     else:
         st.info("주가 데이터 없음")
