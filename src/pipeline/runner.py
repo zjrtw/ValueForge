@@ -201,7 +201,6 @@ def _screen(
 
     # YoY 성장률 컬럼 추가 (Stage 2 성장 점수 계산용)
     from src.scoring.growth_scorer import add_yoy_growth_columns
-    from src.scoring.momentum_scorer import latest_momentum_returns
 
     dataset = add_yoy_growth_columns(dataset)
 
