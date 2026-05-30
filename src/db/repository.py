@@ -734,7 +734,7 @@ class Repository:
 
         # (code, year) 쌍을 WHERE 절로 변환
         conditions = " OR ".join(["(stock_code = ? AND fiscal_year = ? AND fiscal_quarter = 0)"] * len(code_year_pairs))
-        params = []
+        params: list[str | int] = []
         for code, year in code_year_pairs:
             params.extend([str(code).zfill(6), int(year)])
 
@@ -745,7 +745,7 @@ class Repository:
             ORDER BY stock_code, fiscal_year DESC
         """
 
-        return pd.read_sql_query(query, self.conn, params=params)
+        return pd.read_sql_query(query, self.conn, params=tuple(params))
 
 
 def _records(

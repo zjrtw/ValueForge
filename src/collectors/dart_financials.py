@@ -117,14 +117,14 @@ def fetch_financial_statements(
         max_workers=settings.DART_MAX_WORKERS
     ) if r is not None]
 
-    all_rows = new_rows
+    all_rows: list[dict[str, Any]] = new_rows
     if conn is not None and cached_pairs:
         from src.db.repository import Repository
 
         repo = Repository(conn)
         cached_df = repo.get_fundamentals_by_codes_years(list(cached_pairs))
         if not cached_df.empty:
-            all_rows.extend(cached_df.to_dict(orient="records"))
+            all_rows.extend(cached_df.to_dict(orient="records"))  # type: ignore
 
     result = pd.DataFrame(all_rows, columns=_fundamental_columns()) if all_rows else pd.DataFrame(columns=_fundamental_columns())
     log.info("dart financial collection complete", total=len(result), cached=len(cached_pairs))
