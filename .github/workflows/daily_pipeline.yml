@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       date_override:
-        description: "실행 기준일 (YYYY-MM-DD). 비워두면 오늘 날짜."
+        description: "실행 기준일 (YYYY-MM-DD). 비워두면 KST 기준 전날."
         required: false
       skip_upload:
         description: "R2 업로드 건너뜀 (true/false)"
@@ -36,9 +36,15 @@ jobs:
 
       - name: 거래일 확인
         id: check_trading_day
+        env:
+          DATE_OVERRIDE: ${{ github.event.inputs.date_override }}
         run: |
-          IS_TRADING_DAY=$(python -c "from src.utils.market_calendar import is_trading_day; print('true' if is_trading_day() else 'false')")
-          echo "is_trading_day=$IS_TRADING_DAY" >> $GITHUB_OUTPUT
+          RUN_DATE=$(python -c "import os; from datetime import UTC, datetime, timedelta; d=os.environ.get('DATE_OVERRIDE', '').strip(); print(d or ((datetime.now(tz=UTC) + timedelta(hours=9)).date() - timedelta(days=1)).isoformat())")
+          export RUN_DATE
+          printf 'run_date=%s\n' "$RUN_DATE" >> "$GITHUB_OUTPUT"
+          IS_TRADING_DAY=$(python -c "import os; from datetime import date; from src.utils.market_calendar import is_trading_day; d=os.environ['RUN_DATE']; print('true' if is_trading_day(date.fromisoformat(d)) else 'false')" | tail -n 1)
+          IS_TRADING_DAY="$(printf '%s' "$IS_TRADING_DAY" | tr -d '\r\n')"
+          printf 'is_trading_day=%s\n' "$IS_TRADING_DAY" >> "$GITHUB_OUTPUT"
           if [ "$IS_TRADING_DAY" = "false" ]; then
             echo "🔔 오늘은 KRX 휴장일입니다. 파이프라인을 건너뜁니다."
             exit 0
@@ -55,16 +61,12 @@ jobs:
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
           MARKETS: ${{ github.event.inputs.markets || 'KOSPI' }}
         run: |
-          DATE_ARG="${{ github.event.inputs.date_override }}"
+          DATE_ARG="${{ steps.check_trading_day.outputs.run_date }}"
           UPLOAD_FLAG=""
           if [ "${{ github.event.inputs.skip_upload }}" = "true" ]; then
             UPLOAD_FLAG="--no-upload"
           fi
-          if [ -n "$DATE_ARG" ]; then
-            python -m src.pipeline.runner --date "$DATE_ARG" $UPLOAD_FLAG
-          else
-            python -m src.pipeline.runner $UPLOAD_FLAG
-          fi
+          python -m src.pipeline.runner --date "$DATE_ARG" $UPLOAD_FLAG
 
       - name: 파이프라인 로그 아티팩트 업로드
         if: always()

@@ -24,12 +24,12 @@ async function runScheduler(env) {
     return;
   }
 
-  // KST 기준 오늘 날짜
   const kstToday = getKstDate();
-  console.log(`[${kstToday}] Cloudflare 스케줄러: 파이프라인 실행 명령 전송 중...`);
+  const runDate = getKstDateOffset(-1);
+  console.log(`[${kstToday}] Cloudflare 스케줄러: ${runDate} 기준 파이프라인 실행 명령 전송 중...`);
 
   try {
-    await triggerWorkflow(PAT, kstToday);
+    await triggerWorkflow(PAT, kstToday, runDate);
   } catch (err) {
     console.error(`[${kstToday}] 오류: ${err.message}`);
   }
@@ -38,18 +38,23 @@ async function runScheduler(env) {
 /**
  * workflow_dispatch 트리거
  */
-async function triggerWorkflow(pat, kstToday) {
+async function triggerWorkflow(pat, kstToday, runDate) {
   const url =
     `https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW_FILE}/dispatches`;
 
   const res = await ghFetch(url, pat, {
     method: "POST",
-    body: JSON.stringify({ ref: "main" }),
+    body: JSON.stringify({
+      ref: "main",
+      inputs: {
+        date_override: runDate,
+      },
+    }),
   });
 
   // 204 No Content = 성공
   if (res.status === 204 || res.ok) {
-    console.log(`[${kstToday}] ✅ GitHub Actions 파이프라인 트리거 성공`);
+    console.log(`[${kstToday}] ✅ GitHub Actions 파이프라인 트리거 성공 (date_override=${runDate})`);
   } else {
     const body = await res.text();
     throw new Error(`트리거 실패 (${res.status}): ${body}`);
@@ -77,5 +82,13 @@ function ghFetch(url, pat, options = {}) {
  * KST(UTC+9) 기준 오늘 날짜 반환 (YYYY-MM-DD)
  */
 function getKstDate() {
-  return new Date(Date.now() + KST_OFFSET_MS).toISOString().slice(0, 10);
+  return getKstDateOffset(0);
+}
+
+/**
+ * KST(UTC+9) 기준 날짜에 dayOffset을 더해 반환 (YYYY-MM-DD)
+ */
+function getKstDateOffset(dayOffset) {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return new Date(Date.now() + KST_OFFSET_MS + dayOffset * dayMs).toISOString().slice(0, 10);
 }
