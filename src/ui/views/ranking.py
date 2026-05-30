@@ -1,6 +1,8 @@
 """랭킹 페이지 — 메인 테이블, 사이드바 필터, 점수 지표."""
 from __future__ import annotations
 
+from typing import Any
+
 import pandas as pd
 import streamlit as st
 
@@ -9,6 +11,7 @@ from src.ui.data_loader import (
     load_rankings,
     load_scores_with_filters,
 )
+from src.ui.metric_guides import metric_help
 
 _SCORE_COLS = [
     "value_score",
@@ -176,6 +179,25 @@ def build_score_metrics(df: pd.DataFrame) -> dict[str, float]:
     return metrics
 
 
+def build_ranking_column_config(display_columns: list[str]) -> dict[str, Any]:
+    """랭킹 테이블 컬럼별 표시 설정을 만든다."""
+    score_cols = {"종합점수", "가치", "품질", "안전", "성장", "모멘텀"}
+    config: dict[str, Any] = {}
+    for col in display_columns:
+        help_text = metric_help(col)
+        if col in score_cols:
+            config[col] = st.column_config.ProgressColumn(
+                col,
+                help=help_text,
+                min_value=0,
+                max_value=100,
+                format="%.1f",
+            )
+        elif help_text:
+            config[col] = st.column_config.Column(col, help=help_text)
+    return config
+
+
 def _severity_badge(severity: str | None) -> str:
     colors = {"CRITICAL": "🔴", "HIGH": "🟠", "MEDIUM": "🟡", "LOW": "🔵"}
     return colors.get(severity or "", "⚪")
@@ -321,11 +343,11 @@ def render() -> None:
     metrics = build_score_metrics(df)
     m1, m2, m3, m4, m5, m6 = st.columns(6)
     m1.metric("종목 수", f"{int(metrics['count'])}")
-    m2.metric("평균 종합", f"{metrics.get('avg_composite', 0):.1f}")
-    m3.metric("평균 가치", f"{metrics.get('avg_value_score', 0):.1f}")
-    m4.metric("평균 품질", f"{metrics.get('avg_quality_score', 0):.1f}")
-    m5.metric("평균 안전", f"{metrics.get('avg_safety_score', 0):.1f}")
-    m6.metric("평균 성장", f"{metrics.get('avg_growth_score', 0):.1f}")
+    m2.metric("평균 종합", f"{metrics.get('avg_composite', 0):.1f}", help=metric_help("종합점수"))
+    m3.metric("평균 가치", f"{metrics.get('avg_value_score', 0):.1f}", help=metric_help("가치"))
+    m4.metric("평균 품질", f"{metrics.get('avg_quality_score', 0):.1f}", help=metric_help("품질"))
+    m5.metric("평균 안전", f"{metrics.get('avg_safety_score', 0):.1f}", help=metric_help("안전"))
+    m6.metric("평균 성장", f"{metrics.get('avg_growth_score', 0):.1f}", help=metric_help("성장"))
 
     st.divider()
 
@@ -359,22 +381,11 @@ def render() -> None:
 
     df_display = df_display.rename(columns=_COL_LABELS)
 
-    score_cols_kr = ["종합점수", "가치", "품질", "안전", "성장", "모멘텀"]
-    present_score_cols = [c for c in score_cols_kr if c in df_display.columns]
-
     st.dataframe(
         df_display,
         use_container_width=True,
         hide_index=True,
-        column_config={
-            col: st.column_config.ProgressColumn(
-                col,
-                min_value=0,
-                max_value=100,
-                format="%.1f",
-            )
-            for col in present_score_cols
-        },
+        column_config=build_ranking_column_config(df_display.columns.tolist()),
     )
 
     col_caption, col_download = st.columns([5, 1])

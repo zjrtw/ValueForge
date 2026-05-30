@@ -199,6 +199,20 @@ def _screen(
     # 다년도 재무 컬럼 추가 (Stage 3 함정 감지용)
     dataset = _enrich_multiyear(dataset, repo.conn)
 
+    # YoY 성장률 컬럼 추가 (Stage 2 성장 점수 계산용)
+    from src.scoring.growth_scorer import add_yoy_growth_columns
+
+    dataset = add_yoy_growth_columns(dataset)
+
+    # 모멘텀 수익률 계산 (가격 이력 필요)
+    momentum_df = _calculate_momentum_returns(dataset, repo.conn)
+    dataset = dataset.merge(
+        momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]],
+        on="stock_code",
+        how="left"
+    )
+    log.info("growth_momentum_calculated", growth_cols_added=True, momentum_cols_added=True)
+
     # Stage 1
     s1 = stage1_filter(dataset)
     log.info("stage1_done", pass_count=len(s1))
@@ -306,6 +320,37 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
         result = result.merge(pivot.reset_index(), on="stock_code", how="left")
 
     return result
+
+
+def _calculate_momentum_returns(
+    dataset: pd.DataFrame,
+    conn: sqlite3.Connection,
+) -> pd.DataFrame:
+    """각 종목의 가격 이력에서 모멘텀 수익률(6M, 3M, 1M)을 계산한다."""
+    codes = dataset["stock_code"].unique().tolist()
+    if not codes:
+        return pd.DataFrame(columns=["stock_code", "return_6m", "return_3m", "return_1m"])
+
+    placeholders = ",".join(["?"] * len(codes))
+    query = f"""
+        SELECT stock_code, date, close
+        FROM prices
+        WHERE stock_code IN ({placeholders})
+        ORDER BY stock_code, date DESC
+    """
+    prices_df = pd.read_sql_query(query, conn, params=codes)
+
+    if prices_df.empty:
+        result = pd.DataFrame({"stock_code": codes})
+        for col in ["return_6m", "return_3m", "return_1m"]:
+            result[col] = None
+        return result
+
+    from src.scoring.momentum_scorer import latest_momentum_returns
+
+    # 모멘텀 수익률 계산
+    momentum_df = latest_momentum_returns(prices_df)
+    return momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]]
 
 
 def _calculate_missing_bps(
