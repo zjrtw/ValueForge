@@ -1,13 +1,14 @@
-name            = "valueforge-scheduler"
-main            = "worker.js"
+name              = "valueforge-scheduler"
+main              = "worker.js"
 compatibility_date = "2024-01-01"
+build             = { command = "npm ci" }
 
 # ─── Cron 트리거 ───────────────────────────────────────────────────────────────
 # GitHub Actions 스케줄을 대신하여 08:00 KST (23:00 UTC 전 날)에 직접 트리거
 # KRX 익일 데이터 공개 후 실행
-# 요일: 1=월, 2=화, 3=수, 4=목, 5=금
+# 요일: 2=화, 3=수, 4=목, 5=금, 6=토
 [triggers]
-crons = ["0 23 * * 1-5"]
+crons = ["0 23 * * 2-6"]
 
 # ─── Secrets (wrangler secret put 으로 등록) ───────────────────────────────────
 # GITHUB_PAT  : GitHub Personal Access Token

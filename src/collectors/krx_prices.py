@@ -29,7 +29,7 @@ def fetch_daily_price_data(
 
     반환 컬럼:
         stock_code, date, close, trading_value, market_cap,
-        per, pbr, dividend_yield, market
+        per, pbr, dividend_yield, market, sector
     """
     query_date = _normalize_query_date(base_date)
     output_date = _format_output_date(query_date)
@@ -80,6 +80,7 @@ def fetch_daily_price_data(
             "pbr",
             "dividend_yield",
             "market",
+            "sector",
         ]
     ].reset_index(drop=True)
 
@@ -264,6 +265,7 @@ def _fetch_market_price_data(query_date: str, market: str) -> pd.DataFrame:
             "pbr": _parse_numeric(item.get("PBR")),
             "dividend_yield": _parse_numeric(item.get("DIV_YD")),
             "market": market.upper(),
+            "sector": item.get("SECT_TP_NM") or "Unknown",
         })
 
     if not rows:
@@ -403,5 +405,6 @@ def _empty_price_frame() -> pd.DataFrame:
             "pbr",
             "dividend_yield",
             "market",
+            "sector",
         ]
     )

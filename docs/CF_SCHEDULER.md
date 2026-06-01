@@ -1,16 +1,15 @@
-# Cloudflare Workers 백업 스케줄러
+# Cloudflare Workers 스케줄러
 
-GitHub Actions cron이 지연·스킵될 때 자동으로 파이프라인을 트리거하는 백업 스케줄러.
+GitHub Actions 구동 스케줄러.
+GitHub Actions 자체 스케줄이 제 때 실행이 안되고 2~3시간 지연실행되거나 아예 실행이 안되는 등 불안정한 이유로  Cloudflare Workers 에서 GitHub Actions 구동 시킴
 
 ---
 
 ## 동작 원리
 
 ```
-08:00 UTC (17:00 KST)  →  GitHub Actions 자체 cron 시도
-08:30 UTC (17:30 KST)  →  Cloudflare Workers 실행
-                            ├─ 오늘 성공/진행 중인 run 있음  →  스킵 ✅
-                            └─ 오늘 run 없음                →  workflow_dispatch 트리거 🔁
+23:00 UTC (08:00 KST+1)  →  Cloudflare Workers 실행 (화~토요일)
+                            └─ GitHub Actions workflow_dispatch 트리거
 ```
 
 **소스**: [infra/cf-scheduler/worker.js](../infra/cf-scheduler/worker.js)
@@ -69,9 +68,9 @@ npx wrangler deploy
 
 배포 완료 후 출력 예시:
 ```
-✅ Successfully deployed valueforge-scheduler
-   Triggers:
-     - cron: 30 8 * * 1-5
+Uploaded valueforge-scheduler (2.72 sec)
+Deployed valueforge-scheduler triggers (1.27 sec)
+  schedule: 0 23 * * 2-6
 ```
 
 ---
@@ -110,9 +109,9 @@ Workers & Pages → `valueforge-scheduler` → **Metrics** 탭에서 cron 실행
 
 | 항목 | 무료 플랜 한도 | 실제 사용 |
 |------|-------------|---------|
-| 요청 수 | 10만/일 | 1회/일 |
+| 요청 수 | 10만/일 | 1회/일 (화~토) |
 | CPU 시간 | 10ms/요청 | ~5ms |
-| Cron 트리거 | 제한 없음 | 1회/영업일 |
+| Cron 트리거 | 제한 없음 | 1회/일 (화~토) |
 
 → **무료 플랜으로 충분**
 

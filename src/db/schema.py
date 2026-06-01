@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS fundamentals (
     current_ratio       REAL,
     interest_coverage   REAL,
     data_source         TEXT DEFAULT 'dart',
-    collected_at        TEXT DEFAULT (datetime('now')),
+    collected_at        TEXT DEFAULT (datetime('now', '+9 hours')),
     FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
     UNIQUE (stock_code, fiscal_year, fiscal_quarter)
 );

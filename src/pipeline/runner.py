@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_financial_statements
+from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
@@ -144,7 +144,6 @@ def _collect(
     # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
-    repo.upsert_stocks(tickers)
     log.info("collect_tickers_done", count=len(tickers))
 
     # 2. 일별 주가
@@ -158,6 +157,23 @@ def _collect(
     else:
         log.warning("collect_prices_empty")
         n_errors = n_collected
+
+    # 4. DART에서 회사 정보 및 업종 정보 수집
+    log.info("collect_company_metadata_start")
+    company_meta = fetch_company_metadata(tickers)
+    if not company_meta.empty:
+        # tickers에 sector 정보 병합
+        meta_sector = company_meta[["stock_code", "sector"]].copy()
+        tickers = tickers.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
+        # 새로 수집한 sector가 있으면 사용, 없으면 기존 값 유지
+        if "sector_meta" in tickers.columns:
+            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
+            tickers = tickers.drop(columns=["sector_meta"])
+        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
+    else:
+        log.warning("collect_company_metadata_empty")
+
+    repo.upsert_stocks(tickers)
 
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
@@ -256,7 +272,8 @@ def _write_results(
         log.info("risk_flags_written", count=len(risk_rows))
 
     # rankings (Stage 4 최종 순위)
-    rankings_df = _build_rankings_df(ranked, run_date_str)
+    # sector, market 등 필수 메타데이터를 stocks 테이블에서 보충
+    rankings_df = _build_rankings_df(ranked, run_date_str, repo.conn)
     repo.upsert_rankings(rankings_df)
     log.info("rankings_written", count=len(rankings_df))
 
@@ -434,7 +451,7 @@ def _build_risk_flags(
     return rows
 
 
-def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str) -> pd.DataFrame:
+def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Connection) -> pd.DataFrame:
     df = ranked.copy()
     df["run_date"] = run_date_str
     df["rank"] = df["final_rank"]
@@ -451,6 +468,29 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str) -> pd.DataFrame:
         + pd.to_numeric(low_flags, errors="coerce").fillna(0)
     ).astype(int)
     df["highest_severity"] = [_highest_severity(row) for _, row in df.iterrows()]
+
+    # stocks 테이블에서 stock_name, market, sector를 보충
+    # (stage 거치면서 손실될 수 있으므로 명시적으로 재추가)
+    if "stock_code" in df.columns:
+        stocks_info = pd.read_sql_query(
+            "SELECT stock_code, stock_name, market, sector FROM stocks",
+            conn,
+        )
+        # 기존 값을 유지하면서 NULL인 부분만 채우기
+        for col in ["stock_name", "market", "sector"]:
+            if col not in df.columns:
+                df = df.merge(
+                    stocks_info[["stock_code", col]],
+                    on="stock_code",
+                    how="left",
+                )
+            else:
+                # 기존 값이 NULL이면 stocks 테이블 값으로 채우기
+                stocks_merge = stocks_info[["stock_code", col]].rename(columns={col: f"{col}_from_stocks"})
+                df = df.merge(stocks_merge, on="stock_code", how="left")
+                df[col] = df[col].fillna(df[f"{col}_from_stocks"])
+                df = df.drop(columns=[f"{col}_from_stocks"])
+
     return df
 
 
