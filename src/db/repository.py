@@ -17,6 +17,10 @@ STOCK_COLUMNS = [
     "industry",
     "listing_date",
     "shares_outstanding",
+    "latest_disclosure_date",
+    "disclosure_delay_days",
+    "largest_shareholder_ratio",
+    "institutional_ratio",
     "is_active",
 ]
 
@@ -134,11 +138,13 @@ class Repository:
             """
             INSERT INTO stocks (
                 stock_code, stock_name, stock_name_en, market, sector, industry,
-                listing_date, shares_outstanding, is_active
+                listing_date, shares_outstanding, latest_disclosure_date, disclosure_delay_days,
+                largest_shareholder_ratio, institutional_ratio, is_active
             )
             VALUES (
                 :stock_code, :stock_name, :stock_name_en, :market, :sector, :industry,
-                :listing_date, :shares_outstanding, :is_active
+                :listing_date, :shares_outstanding, :latest_disclosure_date, :disclosure_delay_days,
+                :largest_shareholder_ratio, :institutional_ratio, :is_active
             )
             ON CONFLICT(stock_code) DO UPDATE SET
                 stock_name = excluded.stock_name,
@@ -148,6 +154,10 @@ class Repository:
                 industry = COALESCE(excluded.industry, stocks.industry),
                 listing_date = COALESCE(excluded.listing_date, stocks.listing_date),
                 shares_outstanding = COALESCE(excluded.shares_outstanding, stocks.shares_outstanding),
+                latest_disclosure_date = COALESCE(excluded.latest_disclosure_date, stocks.latest_disclosure_date),
+                disclosure_delay_days = COALESCE(excluded.disclosure_delay_days, stocks.disclosure_delay_days),
+                largest_shareholder_ratio = COALESCE(excluded.largest_shareholder_ratio, stocks.largest_shareholder_ratio),
+                institutional_ratio = COALESCE(excluded.institutional_ratio, stocks.institutional_ratio),
                 is_active = excluded.is_active,
                 updated_at = datetime('now')
             """,

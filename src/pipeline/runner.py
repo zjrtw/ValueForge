@@ -18,6 +18,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
+from src.collectors.dart_corporate_info import fetch_disclosure_dates, fetch_major_shareholders
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
@@ -169,6 +170,26 @@ def _collect(
         log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
     else:
         log.warning("collect_company_metadata_empty")
+
+    # 5. 공시 정보 수집 (공시 지연 감지용)
+    log.info("collect_disclosure_dates_start")
+    disclosure_info = fetch_disclosure_dates(tickers)
+    if not disclosure_info.empty:
+        disc_cols = disclosure_info[["stock_code", "latest_disclosure_date", "disclosure_delay_days"]].copy()
+        tickers = tickers.merge(disc_cols, on="stock_code", how="left")
+        log.info("collect_disclosure_dates_done", count=len(disclosure_info))
+    else:
+        log.warning("collect_disclosure_dates_empty")
+
+    # 6. 주요주주 정보 수집 (지배 구조 리스크 감지용)
+    log.info("collect_major_shareholders_start")
+    shareholder_info = fetch_major_shareholders(tickers)
+    if not shareholder_info.empty:
+        sh_cols = shareholder_info[["stock_code", "largest_shareholder_ratio", "institutional_ratio"]].copy()
+        tickers = tickers.merge(sh_cols, on="stock_code", how="left")
+        log.info("collect_major_shareholders_done", count=len(shareholder_info))
+    else:
+        log.warning("collect_major_shareholders_empty")
 
     # stocks 테이블에 먼저 저장 (prices에서 FK 제약 필요)
     repo.upsert_stocks(tickers)

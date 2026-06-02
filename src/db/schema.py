@@ -10,18 +10,22 @@ PRAGMA cache_size = -64000;
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS stocks (
-    stock_code          TEXT PRIMARY KEY,
-    stock_name          TEXT NOT NULL,
-    stock_name_en       TEXT,
-    market              TEXT NOT NULL
-                        CHECK (market IN ('KOSPI', 'KOSDAQ')),
-    sector              TEXT,
-    industry            TEXT,
-    listing_date        DATE,
-    shares_outstanding  INTEGER,
-    is_active           INTEGER NOT NULL DEFAULT 1,
-    created_at          TEXT DEFAULT (datetime('now')),
-    updated_at          TEXT DEFAULT (datetime('now'))
+    stock_code              TEXT PRIMARY KEY,
+    stock_name              TEXT NOT NULL,
+    stock_name_en           TEXT,
+    market                  TEXT NOT NULL
+                            CHECK (market IN ('KOSPI', 'KOSDAQ')),
+    sector                  TEXT,
+    industry                TEXT,
+    listing_date            DATE,
+    shares_outstanding      INTEGER,
+    latest_disclosure_date  DATE,
+    disclosure_delay_days   INTEGER,
+    largest_shareholder_ratio  REAL,
+    institutional_ratio     REAL,
+    is_active               INTEGER NOT NULL DEFAULT 1,
+    created_at              TEXT DEFAULT (datetime('now')),
+    updated_at              TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS prices (
