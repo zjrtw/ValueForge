@@ -21,8 +21,10 @@ class Settings(BaseSettings):
     # KRX Open API
     KRX_AUTH_KEY: str = ""
 
-    # Gemini AI API
-    GEMINI_API_KEY: str = ""
+    # AI 분석 (Gemini, OpenAI 등)
+    AI_API_KEY: str = ""
+    AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
+    AI_MODEL: str = "gemini-2.5-flash"
 
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""

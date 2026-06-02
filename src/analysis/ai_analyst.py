@@ -33,8 +33,8 @@ def generate_investment_analysis(
     Returns:
         Gemini가 생성한 종합 분석 텍스트
     """
-    if not settings.GEMINI_API_KEY:
-        log.warning("gemini_analysis_skipped: no API key")
+    if not settings.AI_API_KEY:
+        log.warning("ai_analysis_skipped: no API key configured")
         return _generate_fallback_analysis(stock_name, scores, risk_flags)
 
     try:
@@ -50,8 +50,8 @@ def generate_investment_analysis(
     for attempt in range(max_retries):
         try:
             import time
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            genai.configure(api_key=settings.AI_API_KEY)
+            model = genai.GenerativeModel(settings.AI_MODEL)
 
             prompt = _build_analysis_prompt(
                 stock_code, stock_name, scores, risk_flags, fundamentals, market_info, disclosure_summary
@@ -77,7 +77,7 @@ def generate_investment_analysis(
             ])
 
             analysis = response.text
-            log.info("gemini_analysis_generated", stock_code=stock_code, length=len(analysis))
+            log.info("ai_analysis_generated", stock_code=stock_code, model=settings.AI_MODEL, length=len(analysis))
             return analysis
 
         except Exception as exc:
