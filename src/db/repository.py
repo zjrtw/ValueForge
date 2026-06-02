@@ -103,6 +103,8 @@ RANKING_COLUMNS = [
     "debt_to_equity",
     "risk_flag_count",
     "highest_severity",
+    "score_change_20d",
+    "score_volatility",
 ]
 
 RISK_FLAG_COLUMNS = [
@@ -469,13 +471,15 @@ class Repository:
                 run_date, rank, stock_code, stock_name, market, sector,
                 composite_score, value_score, quality_score, safety_score,
                 growth_score, momentum_score, market_cap_b, per, pbr, roe,
-                dividend_yield, debt_to_equity, risk_flag_count, highest_severity
+                dividend_yield, debt_to_equity, risk_flag_count, highest_severity,
+                score_change_20d, score_volatility
             )
             VALUES (
                 :run_date, :rank, :stock_code, :stock_name, :market, :sector,
                 :composite_score, :value_score, :quality_score, :safety_score,
                 :growth_score, :momentum_score, :market_cap_b, :per, :pbr, :roe,
-                :dividend_yield, :debt_to_equity, :risk_flag_count, :highest_severity
+                :dividend_yield, :debt_to_equity, :risk_flag_count, :highest_severity,
+                :score_change_20d, :score_volatility
             )
             ON CONFLICT(run_date, stock_code) DO UPDATE SET
                 rank = excluded.rank,
@@ -495,7 +499,9 @@ class Repository:
                 dividend_yield = excluded.dividend_yield,
                 debt_to_equity = excluded.debt_to_equity,
                 risk_flag_count = excluded.risk_flag_count,
-                highest_severity = excluded.highest_severity
+                highest_severity = excluded.highest_severity,
+                score_change_20d = excluded.score_change_20d,
+                score_volatility = excluded.score_volatility
             """,
             records,
         )
@@ -746,6 +752,27 @@ class Repository:
         """
 
         return pd.read_sql_query(query, self.conn, params=tuple(params))
+
+    def get_score_history(self, stock_code: str, days: int = 30) -> pd.DataFrame:
+        """종목의 점수 변화 이력을 조회한다 (최근 N일).
+
+        Args:
+            stock_code: 종목 코드
+            days: 조회 일수 (기본 30일)
+
+        Returns:
+            run_date, composite_score, value_score, quality_score, safety_score, growth_score, momentum_score
+        """
+        query = """
+            SELECT run_date, composite_score, value_score, quality_score,
+                   safety_score, growth_score, momentum_score
+            FROM scores
+            WHERE stock_code = ?
+              AND julianday('now') - julianday(run_date) <= ?
+            ORDER BY run_date DESC
+            LIMIT 100
+        """
+        return pd.read_sql_query(query, self.conn, params=(stock_code, days))
 
 
 def _records(

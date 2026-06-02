@@ -140,13 +140,40 @@ def _collect(
     repo: Repository,
     run_date: date,
 ) -> tuple[pd.DataFrame, int, int]:
-    """수집 단계: tickers → prices → fundamentals."""
+    """수집 단계: tickers → stocks(FK) → prices → fundamentals."""
     # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
     log.info("collect_tickers_done", count=len(tickers))
 
-    # 2. 일별 주가
+    # 4. DART에서 회사 정보 및 업종 정보 수집 (먼저 수집해서 stocks에 저장)
+    log.info("collect_company_metadata_start")
+    company_meta = fetch_company_metadata(tickers)
+    if not company_meta.empty:
+        # tickers에 sector, industry, stock_name_en 정보 병합
+        meta_cols = company_meta[["stock_code", "sector", "industry", "stock_name_en"]].copy()
+        tickers = tickers.merge(meta_cols, on="stock_code", how="left", suffixes=("", "_meta"))
+        # 새로 수집한 값이 있으면 사용, 없으면 기존 값 유지
+        if "sector_meta" in tickers.columns:
+            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
+            tickers = tickers.drop(columns=["sector_meta"])
+        if "industry" in tickers.columns and "industry_meta" not in tickers.columns:
+            # industry가 이미 있으면 업데이트하지 않음
+            pass
+        elif "industry_meta" in tickers.columns:
+            tickers["industry"] = tickers["industry_meta"].fillna(tickers.get("industry"))
+            tickers = tickers.drop(columns=["industry_meta"])
+        if "stock_name_en_meta" in tickers.columns:
+            tickers["stock_name_en"] = tickers["stock_name_en_meta"].fillna(tickers.get("stock_name_en"))
+            tickers = tickers.drop(columns=["stock_name_en_meta"])
+        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
+    else:
+        log.warning("collect_company_metadata_empty")
+
+    # stocks 테이블에 먼저 저장 (prices에서 FK 제약 필요)
+    repo.upsert_stocks(tickers)
+
+    # 2. 일별 주가 (stocks FK 제약이 있으므로 이후에)
     log.info("collect_prices_start")
     prices = fetch_daily_price_data(run_date, tickers)
     n_collected = len(tickers)
@@ -157,23 +184,6 @@ def _collect(
     else:
         log.warning("collect_prices_empty")
         n_errors = n_collected
-
-    # 4. DART에서 회사 정보 및 업종 정보 수집
-    log.info("collect_company_metadata_start")
-    company_meta = fetch_company_metadata(tickers)
-    if not company_meta.empty:
-        # tickers에 sector 정보 병합
-        meta_sector = company_meta[["stock_code", "sector"]].copy()
-        tickers = tickers.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
-        # 새로 수집한 sector가 있으면 사용, 없으면 기존 값 유지
-        if "sector_meta" in tickers.columns:
-            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
-            tickers = tickers.drop(columns=["sector_meta"])
-        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
-    else:
-        log.warning("collect_company_metadata_empty")
-
-    repo.upsert_stocks(tickers)
 
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
@@ -310,7 +320,7 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
     """Stage 3 함정 감지용 다년도 컬럼(yr1/yr2/yr3)을 추가한다."""
     query = """
         SELECT stock_code, fiscal_year,
-               operating_profit, free_cash_flow, operating_margin
+               operating_profit, free_cash_flow, operating_margin, dps
         FROM fundamentals
         WHERE fiscal_quarter = 0
         ORDER BY stock_code, fiscal_year DESC
@@ -331,6 +341,7 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
         ("operating_profit", "op_profit"),
         ("free_cash_flow", "fcf"),
         ("operating_margin", "op_margin"),
+        ("dps", "dps"),
     ]:
         pivot = hist.pivot_table(
             index="stock_code", columns="yr_rank", values=col, aggfunc="first"
@@ -469,6 +480,11 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Co
     ).astype(int)
     df["highest_severity"] = [_highest_severity(row) for _, row in df.iterrows()]
 
+    # 점수 추세 & 신뢰도 계산 (20일간의 변화율과 변동성)
+    if "stock_code" in df.columns:
+        score_trends = _calculate_score_trends(df["stock_code"].unique(), conn)
+        df = df.merge(score_trends, on="stock_code", how="left")
+
     # stocks 테이블에서 stock_name, market, sector를 보충
     # (stage 거치면서 손실될 수 있으므로 명시적으로 재추가)
     if "stock_code" in df.columns:
@@ -492,6 +508,55 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Co
                 df = df.drop(columns=[f"{col}_from_stocks"])
 
     return df
+
+
+def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) -> pd.DataFrame:
+    """최근 20일간 점수 추세를 계산한다.
+
+    반환: stock_code, score_change_20d, score_volatility
+    """
+    if not stock_codes:
+        return pd.DataFrame(columns=["stock_code", "score_change_20d", "score_volatility"])
+
+    from src.db.repository import Repository
+    repo = Repository(conn)
+
+    result_rows = []
+    for code in stock_codes:
+        try:
+            history = repo.get_score_history(code, days=20)
+            if len(history) < 2:
+                result_rows.append({
+                    "stock_code": code,
+                    "score_change_20d": None,
+                    "score_volatility": None,
+                })
+                continue
+
+            # 최근 점수(가장 최근이 인덱스 0)와 20일 전 점수
+            latest_score = history.iloc[0]["composite_score"]
+            oldest_score = history.iloc[-1]["composite_score"]
+            scores = history["composite_score"].values
+
+            # 20일 변화율 (%)
+            score_change = (latest_score - oldest_score) / oldest_score * 100 if oldest_score != 0 else None
+            # 변동성 (표준편차)
+            score_volatility = scores.std() if len(scores) > 1 else None
+
+            result_rows.append({
+                "stock_code": code,
+                "score_change_20d": score_change,
+                "score_volatility": score_volatility,
+            })
+        except Exception as e:
+            log.warning("score_trend_calculation_failed", stock_code=code, error=str(e))
+            result_rows.append({
+                "stock_code": code,
+                "score_change_20d": None,
+                "score_volatility": None,
+            })
+
+    return pd.DataFrame(result_rows)
 
 
 def _highest_severity(row: pd.Series) -> str | None:

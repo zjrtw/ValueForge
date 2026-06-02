@@ -172,11 +172,10 @@ def fetch_company_metadata(
 ) -> pd.DataFrame:
     """DART company API에서 종목별 메타데이터를 수집한다.
 
-    반환 컬럼: stock_code, stock_name_en, industry
+    반환 컬럼: stock_code, stock_name_en, industry, sector
 
-    - industry: DART induty_code (표준산업분류코드, 예: '264').
-      KRX 섹터명과 다르며 추후 마이그레이션 시 별도 매핑 테이블로 변환 예정.
-    - listing_date: DART company API에 포함되지 않아 수집 불가.
+    - industry: DART induty_code를 표준산업분류명으로 매핑 (예: '264' → '반도체 및 전자부품 제조업')
+    - sector: KRX의 SECT_TP_NM을 보완하는 매핑값
     """
     dart = client if client is not None else _create_dart_client()
     ticker_df = tickers if tickers is not None else fetch_ticker_list()
@@ -201,18 +200,19 @@ def fetch_company_metadata(
             corp_name_eng = info.get("corp_name_eng")
 
             # 업종 코드를 업종명으로 변환
-            sector = get_industry_name(induty_code) if induty_code else "Unknown"
+            industry = get_industry_name(induty_code) if induty_code else "Unknown"
 
             rows.append({
                 "stock_code": code,
                 "stock_name_en": corp_name_eng or None,
-                "sector": sector,
+                "industry": industry,
+                "sector": industry,  # sector와 industry를 동일하게 설정 (DART 기반)
             })
         except Exception as exc:
             log.warning("dart company info fetch failed", stock_code=code, error=str(exc))
 
     log.info("dart company metadata collection complete", total=len(rows))
-    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "sector"]) if rows else pd.DataFrame(columns=["stock_code", "stock_name_en", "sector"])
+    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "industry", "sector"]) if rows else pd.DataFrame(columns=["stock_code", "stock_name_en", "industry", "sector"])
 
 
 def _create_dart_client() -> Any:

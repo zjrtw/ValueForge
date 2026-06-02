@@ -36,6 +36,9 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec("DECLINING_MARGINS", "3년 연속 영업이익률 하락", Severity.MEDIUM),
     FlagSpec("DECLINING_REVENUE", "매출 YoY 5% 이상 감소", Severity.MEDIUM),
     FlagSpec("LOW_INTEREST_COVERAGE", "이자보상배율 1.5배 미만 (채무상환 리스크)", Severity.MEDIUM),
+    FlagSpec("LOW_FCF_QUALITY", "현금흐름 품질 저하: FCF/순이익 < 0.3 (이익이 현금으로 전환 안 됨)", Severity.MEDIUM),
+    FlagSpec("HIGH_PEG_RATIO", "PEG 비율 > 2.0 (성장성 대비 고평가)", Severity.MEDIUM),
+    FlagSpec("DIVIDEND_CUT", "2년 연속 배당금 감소", Severity.MEDIUM),
     # LOW — 정보성
     FlagSpec("HOLDING_COMPANY", "지주회사 (구조적 할인 가능성)", Severity.LOW),
     FlagSpec("HIGH_CAPEX", "CAPEX가 매출의 15% 초과 (자본집약적)", Severity.LOW),
@@ -155,5 +158,28 @@ def _check_flag(df: pd.DataFrame, spec: FlagSpec, params: dict) -> pd.Series:
         capex = _col(df, "capex").abs()
         ratio = capex / revenue.where(revenue > 0)
         return ratio > 0.15
+
+    if name == "LOW_FCF_QUALITY":
+        fcf = _col(df, "free_cash_flow")
+        net_profit = _col(df, "net_profit")
+        # FCF/순이익 비율이 0.3 미만이면 현금 전환율이 낮음 (0.3은 30%)
+        # 순이익이 양수일 때만 계산
+        ratio = fcf / net_profit.where(net_profit > 0)
+        return ratio < 0.3
+
+    if name == "HIGH_PEG_RATIO":
+        per = _col(df, "per")
+        growth = _col(df, "revenue_growth_yoy")
+        # PEG = PER / 성장률(%)
+        # 성장률이 5% 이상일 때만 계산, PEG > 2.0이면 성장 대비 고평가
+        peg = per / (growth * 100).where(growth > 0.05)
+        return peg > 2.0
+
+    if name == "DIVIDEND_CUT":
+        dps = _col(df, "dps")
+        dps_yr1 = _col(df, "dps_yr1")
+        dps_yr2 = _col(df, "dps_yr2")
+        # 2년 연속 배당금 감소
+        return (dps < dps_yr1) & (dps_yr1 < dps_yr2)
 
     return pd.Series(False, index=df.index)

@@ -131,6 +131,8 @@ CREATE TABLE IF NOT EXISTS rankings (
     debt_to_equity      REAL,
     risk_flag_count     INTEGER DEFAULT 0,
     highest_severity    TEXT,
+    score_change_20d    REAL,
+    score_volatility    REAL,
     FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
     UNIQUE (run_date, stock_code)
 );
