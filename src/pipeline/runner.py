@@ -19,6 +19,8 @@ import pandas as pd
 
 from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
 from src.collectors.dart_corporate_info import fetch_disclosure_dates, fetch_major_shareholders
+from src.collectors.dart_news import summarize_disclosure_news
+from src.analysis.ai_analyst import generate_investment_analysis
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
@@ -308,6 +310,11 @@ def _write_results(
     repo.upsert_rankings(rankings_df)
     log.info("rankings_written", count=len(rankings_df))
 
+    # AI 분석 생성 (상위 20개만)
+    log.info("ai_analysis_start")
+    _generate_ai_analyses(repo, ranked.head(20), run_date_str)
+    log.info("ai_analysis_done")
+
 
 def _upload(
     run_date: date,
@@ -578,6 +585,82 @@ def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) ->
             })
 
     return pd.DataFrame(result_rows)
+
+
+def _generate_ai_analyses(
+    repo: Repository,
+    ranked: pd.DataFrame,
+    run_date_str: str,
+) -> None:
+    """상위 랭킹 종목들의 AI 분석을 생성한다."""
+    if ranked.empty:
+        return
+
+    for _, row in ranked.iterrows():
+        try:
+            stock_code = str(row.get("stock_code", "")).zfill(6)
+            stock_name = row.get("stock_name", "")
+
+            if not stock_code:
+                continue
+
+            # 점수 정보
+            scores = {
+                "composite_score": row.get("composite_score"),
+                "value_score": row.get("value_score"),
+                "quality_score": row.get("quality_score"),
+                "safety_score": row.get("safety_score"),
+                "growth_score": row.get("growth_score"),
+                "momentum_score": row.get("momentum_score"),
+            }
+
+            # 위험 플래그
+            risk_flags = (
+                str(row.get("risk_flags", "")).split(",")
+                if row.get("risk_flags")
+                else []
+            )
+
+            # 재무 정보
+            fundamentals = {
+                "per": row.get("per"),
+                "pbr": row.get("pbr"),
+                "roe": row.get("roe"),
+                "debt_ratio": None,  # 별도 계산 필요
+                "dividend_yield": row.get("dividend_yield"),
+                "market_cap_b": row.get("market_cap_b"),
+            }
+
+            # 시장 정보
+            market_info = {
+                "market": row.get("market"),
+                "sector": row.get("sector"),
+                "market_cap_b": row.get("market_cap_b"),
+            }
+
+            # 최근 공시 요약
+            disclosure_summary = summarize_disclosure_news(stock_code, stock_name, days=30)
+
+            # AI 분석 생성
+            analysis = generate_investment_analysis(
+                stock_code,
+                stock_name,
+                scores,
+                risk_flags,
+                fundamentals,
+                market_info,
+                disclosure_summary,
+            )
+
+            # 분석 결과 저장
+            repo.upsert_ai_analysis(stock_code, run_date_str, analysis)
+
+        except Exception as exc:
+            log.warning(
+                "ai_analysis_generation_failed",
+                stock_code=stock_code,
+                error=str(exc),
+            )
 
 
 def _highest_severity(row: pd.Series) -> str | None:

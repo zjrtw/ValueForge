@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # KRX Open API
     KRX_AUTH_KEY: str = ""
 
+    # Gemini AI API
+    GEMINI_API_KEY: str = ""
+
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""

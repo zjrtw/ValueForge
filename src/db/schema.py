@@ -141,6 +141,17 @@ CREATE TABLE IF NOT EXISTS rankings (
     UNIQUE (run_date, stock_code)
 );
 
+CREATE TABLE IF NOT EXISTS ai_analysis (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code          TEXT NOT NULL,
+    run_date            TEXT NOT NULL,
+    analysis_text       TEXT NOT NULL,
+    analysis_type       TEXT DEFAULT 'comprehensive',
+    generated_at        TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
+    UNIQUE (stock_code, run_date)
+);
+
 CREATE TABLE IF NOT EXISTS pipeline_runs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     run_date            TEXT NOT NULL UNIQUE,

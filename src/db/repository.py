@@ -784,6 +784,35 @@ class Repository:
         """
         return pd.read_sql_query(query, self.conn, params=(stock_code, days))
 
+    def upsert_ai_analysis(
+        self,
+        stock_code: str,
+        run_date: str,
+        analysis_text: str,
+        analysis_type: str = "comprehensive",
+    ) -> None:
+        """AI 분석 결과를 저장한다."""
+        self.conn.execute(
+            """
+            INSERT INTO ai_analysis (stock_code, run_date, analysis_text, analysis_type)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(stock_code, run_date) DO UPDATE SET
+                analysis_text = excluded.analysis_text,
+                analysis_type = excluded.analysis_type,
+                generated_at = datetime('now')
+            """,
+            (stock_code, run_date, analysis_text, analysis_type),
+        )
+        self.conn.commit()
+
+    def get_ai_analysis(self, stock_code: str, run_date: str) -> str | None:
+        """특정 종목의 특정 날짜 AI 분석을 조회한다."""
+        row = self.conn.execute(
+            "SELECT analysis_text FROM ai_analysis WHERE stock_code = ? AND run_date = ?",
+            (stock_code, run_date),
+        ).fetchone()
+        return row[0] if row else None
+
 
 def _records(
     rows: pd.DataFrame | Iterable[Mapping[str, Any]],
