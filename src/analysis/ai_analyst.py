@@ -43,40 +43,62 @@ def generate_investment_analysis(
         log.warning("gemini library not installed, using fallback analysis")
         return _generate_fallback_analysis(stock_name, scores, risk_flags)
 
-    try:
-        genai.configure(api_key=settings.GEMINI_API_KEY)
-        model = genai.GenerativeModel("gemini-1.5-flash")
+    # Rate Limit 에러 대응: 최대 3회 재시도
+    max_retries = 3
+    retry_delay = 2  # 초 단위
 
-        prompt = _build_analysis_prompt(
-            stock_code, stock_name, scores, risk_flags, fundamentals, market_info, disclosure_summary
-        )
+    for attempt in range(max_retries):
+        try:
+            import time
+            genai.configure(api_key=settings.GEMINI_API_KEY)
+            model = genai.GenerativeModel("gemini-1.5-flash")
 
-        response = model.generate_content(prompt, safety_settings=[
-            {
-                "category": "HARM_CATEGORY_HARASSMENT",
-                "threshold": "BLOCK_NONE",
-            },
-            {
-                "category": "HARM_CATEGORY_HATE_SPEECH",
-                "threshold": "BLOCK_NONE",
-            },
-            {
-                "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                "threshold": "BLOCK_NONE",
-            },
-            {
-                "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                "threshold": "BLOCK_NONE",
-            },
-        ])
+            prompt = _build_analysis_prompt(
+                stock_code, stock_name, scores, risk_flags, fundamentals, market_info, disclosure_summary
+            )
 
-        analysis = response.text
-        log.info("gemini_analysis_generated", stock_code=stock_code, length=len(analysis))
-        return analysis
+            response = model.generate_content(prompt, safety_settings=[
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_NONE",
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_NONE",
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_NONE",
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_NONE",
+                },
+            ])
 
-    except Exception as exc:
-        log.warning("gemini_analysis_failed", error=str(exc))
-        return _generate_fallback_analysis(stock_name, scores, risk_flags)
+            analysis = response.text
+            log.info("gemini_analysis_generated", stock_code=stock_code, length=len(analysis))
+            return analysis
+
+        except Exception as exc:
+            error_msg = str(exc)
+            is_rate_limit = "rate_limit" in error_msg.lower() or "quota" in error_msg.lower()
+
+            if is_rate_limit and attempt < max_retries - 1:
+                wait_time = retry_delay * (attempt + 1)
+                log.warning(
+                    "gemini_rate_limit_retry",
+                    stock_code=stock_code,
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    wait_seconds=wait_time,
+                    error=error_msg,
+                )
+                time.sleep(wait_time)
+                continue
+            else:
+                log.warning("gemini_analysis_failed", stock_code=stock_code, error=error_msg)
+                return _generate_fallback_analysis(stock_name, scores, risk_flags)
 
 
 def _build_analysis_prompt(

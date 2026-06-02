@@ -592,12 +592,22 @@ def _generate_ai_analyses(
     ranked: pd.DataFrame,
     run_date_str: str,
 ) -> None:
-    """상위 랭킹 종목들의 AI 분석을 생성한다."""
+    """상위 랭킹 종목들의 AI 분석을 생성한다.
+
+    Rate Limit 대응: Gemini API는 분당 60개 요청 제한이므로,
+    1초 이상의 간격을 두고 요청합니다.
+    """
+    import time
+
     if ranked.empty:
         return
 
-    for _, row in ranked.iterrows():
+    for idx, (_, row) in enumerate(ranked.iterrows()):
         try:
+            # Gemini API Rate Limit 대응: 분당 60개 제한
+            # 20개 종목 기준 최소 20초 소요
+            if idx > 0:
+                time.sleep(1.5)  # 요청 간 1.5초 delay
             stock_code = str(row.get("stock_code", "")).zfill(6)
             stock_name = row.get("stock_name", "")
 
