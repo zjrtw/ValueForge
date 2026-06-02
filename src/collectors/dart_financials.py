@@ -8,6 +8,7 @@ import pandas as pd
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.utils.concurrent import parallel_map
 from src.utils.config import settings
+from src.utils.industry_mapper import get_industry_name
 from src.utils.logger import get_logger
 from src.utils.rate_limiter import DailyQuotaTracker
 
@@ -199,17 +200,19 @@ def fetch_company_metadata(
             induty_code = info.get("induty_code")
             corp_name_eng = info.get("corp_name_eng")
 
-            if induty_code or corp_name_eng:
-                rows.append({
-                    "stock_code": code,
-                    "stock_name_en": corp_name_eng or None,
-                    "industry": induty_code or None,
-                })
+            # 업종 코드를 업종명으로 변환
+            sector = get_industry_name(induty_code) if induty_code else "Unknown"
+
+            rows.append({
+                "stock_code": code,
+                "stock_name_en": corp_name_eng or None,
+                "sector": sector,
+            })
         except Exception as exc:
             log.warning("dart company info fetch failed", stock_code=code, error=str(exc))
 
     log.info("dart company metadata collection complete", total=len(rows))
-    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "industry"])
+    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "sector"]) if rows else pd.DataFrame(columns=["stock_code", "stock_name_en", "sector"])
 
 
 def _create_dart_client() -> Any:

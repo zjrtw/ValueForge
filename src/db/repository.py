@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from collections.abc import Iterable, Mapping
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -294,7 +294,7 @@ class Repository:
                 current_ratio = excluded.current_ratio,
                 interest_coverage = excluded.interest_coverage,
                 data_source = excluded.data_source,
-                collected_at = datetime('now')
+                collected_at = datetime('now', '+9 hours')
             """,
             records,
         )
@@ -779,7 +779,8 @@ def _normalize_date(value: str | date) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    kst = timezone(timedelta(hours=9))
+    return datetime.now(kst).replace(microsecond=0).isoformat()
 
 
 def _duration_seconds(started_at: str, completed_at: str) -> int:
