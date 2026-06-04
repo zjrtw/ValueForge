@@ -79,6 +79,7 @@ def test_fetch_daily_price_data_merges_krx_market_frames(mocker):
         "pbr",
         "dividend_yield",
         "market",
+        "sector",
     ]
     assert len(result) == 3
     assert result.loc[result["stock_code"] == "005930", "date"].item() == "2026-05-20"
@@ -224,4 +225,5 @@ def test_fetch_daily_price_data_returns_empty_frame_when_market_call_fails(mocke
         "pbr",
         "dividend_yield",
         "market",
+        "sector",
     ]

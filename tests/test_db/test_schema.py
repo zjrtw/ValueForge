@@ -29,6 +29,7 @@ class SchemaTest(unittest.TestCase):
                 "scores",
                 "risk_flags",
                 "rankings",
+                "ai_insights",
                 "pipeline_runs",
                 "schema_migrations",
             },
@@ -53,6 +54,7 @@ class SchemaTest(unittest.TestCase):
                 "idx_rankings_market",
                 "idx_rankings_sector",
                 "idx_stocks_market",
+                "idx_ai_insights_run_date",
             },
         )
 
@@ -61,8 +63,8 @@ class SchemaTest(unittest.TestCase):
         user_version = self.conn.execute("PRAGMA user_version").fetchone()[0]
 
         self.assertEqual(foreign_keys, 1)
-        self.assertEqual(user_version, 1)
-        self.assertEqual(get_schema_version(self.conn), 1)
+        self.assertEqual(user_version, 2)
+        self.assertEqual(get_schema_version(self.conn), 2)
 
     def test_rejects_invalid_market_and_status_values(self) -> None:
         with self.assertRaises(sqlite3.IntegrityError):
@@ -85,14 +87,14 @@ class SchemaTest(unittest.TestCase):
             )
         ]
 
-        self.assertEqual(versions, [1])
+        self.assertEqual(versions, [2])
 
     def test_migrate_schema_initializes_blank_database(self) -> None:
         conn = sqlite3.connect(":memory:")
         try:
             migrate_schema(conn)
 
-            self.assertEqual(get_schema_version(conn), 1)
+            self.assertEqual(get_schema_version(conn), 2)
             table_count = conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'stocks'"
             ).fetchone()[0]
@@ -101,11 +103,11 @@ class SchemaTest(unittest.TestCase):
             conn.close()
 
     def test_migrate_schema_applies_forward_migration(self) -> None:
-        MIGRATIONS[2] = "CREATE TABLE IF NOT EXISTS migration_test (id INTEGER PRIMARY KEY);"
+        MIGRATIONS[3] = "CREATE TABLE IF NOT EXISTS migration_test (id INTEGER PRIMARY KEY);"
         try:
-            migrate_schema(self.conn, target_version=2)
+            migrate_schema(self.conn, target_version=3)
 
-            self.assertEqual(get_schema_version(self.conn), 2)
+            self.assertEqual(get_schema_version(self.conn), 3)
             table_count = self.conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'migration_test'"
             ).fetchone()[0]
@@ -116,13 +118,13 @@ class SchemaTest(unittest.TestCase):
                 )
             ]
             self.assertEqual(table_count, 1)
-            self.assertEqual(versions, [1, 2])
+            self.assertEqual(versions, [2, 3])
         finally:
-            MIGRATIONS.pop(2, None)
+            MIGRATIONS.pop(3, None)
 
     def test_migrate_schema_rejects_missing_forward_migration(self) -> None:
         with self.assertRaises(RuntimeError):
-            migrate_schema(self.conn, target_version=2)
+            migrate_schema(self.conn, target_version=3)
 
 
 if __name__ == "__main__":

@@ -26,6 +26,7 @@ from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
+from src.screening.stage5_ai_analysis import stage5_ai_analysis
 from src.storage.uploader import R2Uploader
 from src.utils.config import settings
 from src.utils.error_handling import check_collection_threshold
@@ -89,13 +90,18 @@ def run_pipeline(
         # ── Phase 3: 결과 저장 ─────────────────────────────────────────────
         _write_results(repo, run_date, stage3_all, ranked)
 
+        # ── Phase 3-5: Stage 5 AI 정성 분석 (GEMINI_API_KEY 설정 시 실행) ──
+        ai_insights_count = _run_stage5(conn, ranked, run_date.isoformat())
+        stats["ai_insights_count"] = ai_insights_count
+
         # ── Phase 4: VACUUM / ANALYZE ──────────────────────────────────────
         conn.execute("VACUUM")
         conn.execute("ANALYZE")
         conn.commit()
         log.info("pipeline_db_optimized")
 
-        repo.record_run_success(run_date, **stats)
+        db_stats = {k: v for k, v in stats.items() if k != "ai_insights_count"}
+        repo.record_run_success(run_date, **db_stats)
         log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
 
         # ── Phase 5: R2 업로드 ─────────────────────────────────────────────
@@ -145,6 +151,9 @@ def _collect(
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
     log.info("collect_tickers_done", count=len(tickers))
+
+    # 1-1. stocks 선삽입 — prices FK 제약 충족을 위해 기본 정보로 먼저 저장
+    repo.upsert_stocks(tickers)
 
     # 2. 일별 주가
     log.info("collect_prices_start")
@@ -504,6 +513,25 @@ def _highest_severity(row: pd.Series) -> str | None:
     if pd.to_numeric(row.get("low_flag_count", 0), errors="coerce") > 0:
         return "LOW"
     return None
+
+
+def _run_stage5(
+    conn: sqlite3.Connection,
+    ranked: pd.DataFrame,
+    run_date_str: str,
+) -> int:
+    """Stage 5 AI 분석을 실행하고 저장된 인사이트 수를 반환한다.
+
+    실패해도 예외를 전파하지 않아 전체 파이프라인이 중단되지 않는다.
+    """
+    try:
+        count = stage5_ai_analysis(ranked, conn, run_date_str)
+        if count > 0:
+            log.info("stage5_done", ai_insights_saved=count)
+        return count
+    except Exception as exc:
+        log.warning("stage5_failed", error=str(exc))
+        return 0
 
 
 def _default_db_path(run_date: date) -> Path:

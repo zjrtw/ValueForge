@@ -115,6 +115,15 @@ RISK_FLAG_COLUMNS = [
     "threshold_value",
 ]
 
+AI_INSIGHT_COLUMNS = [
+    "ticker",
+    "run_date",
+    "guide_text",
+    "sentiment",
+    "generated_at",
+    "model_used",
+]
+
 
 class Repository:
     """ValueForge SQLite 쓰기 저장소."""
@@ -527,6 +536,43 @@ class Repository:
                 records,
             )
         return len(records)
+
+    def upsert_ai_insights(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
+        records = _records(rows, AI_INSIGHT_COLUMNS)
+        if not records:
+            return 0
+
+        self.conn.executemany(
+            """
+            INSERT INTO ai_insights (
+                ticker, run_date, guide_text, sentiment, generated_at, model_used
+            )
+            VALUES (
+                :ticker, :run_date, :guide_text, :sentiment, :generated_at, :model_used
+            )
+            ON CONFLICT(ticker, run_date) DO UPDATE SET
+                guide_text = excluded.guide_text,
+                sentiment = excluded.sentiment,
+                generated_at = excluded.generated_at,
+                model_used = excluded.model_used
+            """,
+            records,
+        )
+        self.conn.commit()
+        return len(records)
+
+    def get_ai_insight(self, ticker: str, run_date: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            """
+            SELECT ticker, run_date, guide_text, sentiment, generated_at, model_used
+            FROM ai_insights
+            WHERE ticker = ? AND run_date = ?
+            """,
+            (ticker, run_date),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(AI_INSIGHT_COLUMNS, row, strict=True))
 
     def record_run_start(
         self,

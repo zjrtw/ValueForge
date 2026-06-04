@@ -87,6 +87,8 @@ def _patch_collectors():
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_TICKERS),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_PRICES),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_FUNDAMENTALS),
+        patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner.calculate_market_ratios", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.R2Uploader"),
     ]
     return patches
@@ -184,6 +186,20 @@ class BuildRiskFlagsTest(unittest.TestCase):
 
 
 class BuildRankingsDfTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from src.db.schema import initialize_schema
+        self._conn = sqlite3.connect(":memory:")
+        initialize_schema(self._conn)
+        # _build_rankings_df 가 stocks 테이블에서 이름/시장 정보를 조회하므로 사전 삽입
+        self._conn.execute(
+            "INSERT INTO stocks (stock_code, stock_name, market, is_active) VALUES (?, ?, ?, 1)",
+            ("005930", "삼성전자", "KOSPI"),
+        )
+        self._conn.commit()
+
+    def tearDown(self) -> None:
+        self._conn.close()
+
     def _make_ranked(self) -> pd.DataFrame:
         return pd.DataFrame([{
             "stock_code": "005930",
@@ -204,29 +220,29 @@ class BuildRankingsDfTest(unittest.TestCase):
         }])
 
     def test_adds_run_date(self) -> None:
-        result = _build_rankings_df(self._make_ranked(), "2025-01-20")
+        result = _build_rankings_df(self._make_ranked(), "2025-01-20", self._conn)
         self.assertEqual(result.iloc[0]["run_date"], "2025-01-20")
 
     def test_rank_equals_final_rank(self) -> None:
-        result = _build_rankings_df(self._make_ranked(), "2025-01-20")
+        result = _build_rankings_df(self._make_ranked(), "2025-01-20", self._conn)
         self.assertEqual(result.iloc[0]["rank"], 1)
 
     def test_market_cap_b_converted(self) -> None:
-        result = _build_rankings_df(self._make_ranked(), "2025-01-20")
+        result = _build_rankings_df(self._make_ranked(), "2025-01-20", self._conn)
         self.assertAlmostEqual(result.iloc[0]["market_cap_b"], 5.0)
 
     def test_risk_flag_count_summed(self) -> None:
-        result = _build_rankings_df(self._make_ranked(), "2025-01-20")
+        result = _build_rankings_df(self._make_ranked(), "2025-01-20", self._conn)
         self.assertEqual(result.iloc[0]["risk_flag_count"], 1)
 
     def test_highest_severity_medium(self) -> None:
-        result = _build_rankings_df(self._make_ranked(), "2025-01-20")
+        result = _build_rankings_df(self._make_ranked(), "2025-01-20", self._conn)
         self.assertEqual(result.iloc[0]["highest_severity"], "MEDIUM")
 
     def test_highest_severity_none_when_no_flags(self) -> None:
         ranked = self._make_ranked()
         ranked.iloc[0, ranked.columns.get_loc("medium_flag_count")] = 0
-        result = _build_rankings_df(ranked, "2025-01-20")
+        result = _build_rankings_df(ranked, "2025-01-20", self._conn)
         self.assertIsNone(result.iloc[0]["highest_severity"])
 
 
