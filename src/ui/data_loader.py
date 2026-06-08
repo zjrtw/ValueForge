@@ -17,7 +17,10 @@ from src.storage.downloader import download_latest_db, get_metadata
 @st.cache_resource(ttl=1800)
 def get_db_connection() -> sqlite3.Connection:
     """로컬 DB 우선, 없으면 R2에서 다운로드 후 읽기 전용 연결을 반환한다."""
-    local_db = Path.cwd() / ".local" / "valueforge_latest.db"
+    # [안정성] 실행 위치(cwd)에 영향받지 않도록 파일 기준 절대 경로 사용
+    project_root = Path(__file__).parents[2]
+    local_db = project_root / ".local" / "valueforge_latest.db"
+    
     db_path = str(local_db) if local_db.exists() else str(download_latest_db())
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)

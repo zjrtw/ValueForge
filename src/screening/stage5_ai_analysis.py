@@ -1,5 +1,4 @@
-from __future__ import annotations
-
+import re
 import sqlite3
 from datetime import UTC, datetime
 from typing import Any
@@ -52,7 +51,7 @@ def stage5_ai_analysis(
     model_name = str(p.get("model", "gemini-1.5-flash"))
 
     repo = Repository(conn)
-    saved_count = 0
+    insights: list[dict[str, Any]] = []
 
     for _, row in top_stocks.iterrows():
         stock_code = str(row.get("stock_code", "")).zfill(6)
@@ -69,19 +68,21 @@ def stage5_ai_analysis(
 
         sentiment = _parse_sentiment(guide_text)
 
-        repo.upsert_ai_insights([{
+        insights.append({
             "ticker": stock_code,
             "run_date": run_date,
             "guide_text": guide_text,
             "sentiment": sentiment,
             "generated_at": _utc_now(),
             "model_used": model_name,
-        }])
-        saved_count += 1
-        log.info("stage5_insight_saved", stock_code=stock_code, stock_name=stock_name, sentiment=sentiment)
+        })
+        log.info("stage5_insight_generated", stock_code=stock_code, stock_name=stock_name, sentiment=sentiment)
 
-    log.info("stage5_complete", saved=saved_count, top_n=top_n)
-    return saved_count
+    if insights:
+        repo.upsert_ai_insights(insights)
+        log.info("stage5_complete", saved=len(insights), top_n=top_n)
+    
+    return len(insights)
 
 
 def _build_prompt(row: pd.Series, news_articles: list[NewsArticle]) -> str:
@@ -103,7 +104,7 @@ def _build_prompt(row: pd.Series, news_articles: list[NewsArticle]) -> str:
         )
         news_section = f"\n\n## 최근 뉴스 헤드라인\n{headlines}"
     else:
-        news_section = "\n\n## 최근 뉴스 헤드라인\n(수집된 뉴스 없음)"
+        news_section = f"\n\n## 최근 뉴스 헤드라인\n(수집된 뉴스 없음)"
 
     return f"""당신은 한국 주식 투자 전문가입니다. 다음 종목 정보와 최근 뉴스를 바탕으로 투자 가이드를 작성하세요.
 
@@ -122,6 +123,12 @@ def _build_prompt(row: pd.Series, news_articles: list[NewsArticle]) -> str:
 
 
 def _parse_sentiment(text: str) -> str:
+    """텍스트에서 '투자의견: [긍정/중립/부정]' 패턴을 찾아 감성을 추출한다."""
+    match = re.search(r"투자의견\s*:\s*(긍정|중립|부정)", text)
+    if match:
+        return match.group(1)
+    
+    # 예외 상황: 명시적인 형식이 없을 경우 텍스트 기반 fallback
     if "투자의견: 긍정" in text or "투자의견:긍정" in text:
         return "긍정"
     if "투자의견: 부정" in text or "투자의견:부정" in text:

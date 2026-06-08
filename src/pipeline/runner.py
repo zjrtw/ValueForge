@@ -22,6 +22,7 @@ from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
+from src.scoring.growth_scorer import add_yoy_growth_columns
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
@@ -167,23 +168,6 @@ def _collect(
         log.warning("collect_prices_empty")
         n_errors = n_collected
 
-    # 4. DART에서 회사 정보 및 업종 정보 수집
-    log.info("collect_company_metadata_start")
-    company_meta = fetch_company_metadata(tickers)
-    if not company_meta.empty:
-        # tickers에 sector 정보 병합
-        meta_sector = company_meta[["stock_code", "sector"]].copy()
-        tickers = tickers.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
-        # 새로 수집한 sector가 있으면 사용, 없으면 기존 값 유지
-        if "sector_meta" in tickers.columns:
-            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
-            tickers = tickers.drop(columns=["sector_meta"])
-        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
-    else:
-        log.warning("collect_company_metadata_empty")
-
-    repo.upsert_stocks(tickers)
-
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
@@ -223,29 +207,46 @@ def _screen(
     dataset = repo.get_screening_dataset(run_date)
     log.info("screen_dataset_loaded", rows=len(dataset))
 
+    # Stage 1 필터링 (가장 가벼운 필터 먼저 수행)
+    s1 = stage1_filter(dataset)
+    log.info("stage1_done", pass_count=len(s1))
+
+    if s1.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # ── [최적화] Stage 1 통과 종목에 대해서만 DART 메타데이터(섹터 등) 수집 ──
+    log.info("collect_company_metadata_start", target_count=len(s1))
+    company_meta = fetch_company_metadata(s1)
+    if not company_meta.empty:
+        meta_sector = company_meta[["stock_code", "sector"]].copy()
+        s1 = s1.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
+        if "sector_meta" in s1.columns:
+            s1["sector"] = s1["sector_meta"].fillna(s1["sector"])
+            s1 = s1.drop(columns=["sector_meta"])
+        
+        # stocks 테이블에도 수집된 섹터 정보 업데이트
+        repo.upsert_stocks(s1[["stock_code", "stock_name", "market", "sector"]])
+        log.info("collect_company_metadata_done", count=len(company_meta))
+    else:
+        log.warning("collect_company_metadata_empty")
+
     # 다년도 재무 컬럼 추가 (Stage 3 함정 감지용)
-    dataset = _enrich_multiyear(dataset, repo.conn)
+    dataset_enriched = _enrich_multiyear(s1, repo.conn)
 
     # YoY 성장률 컬럼 추가 (Stage 2 성장 점수 계산용)
-    from src.scoring.growth_scorer import add_yoy_growth_columns
-
-    dataset = add_yoy_growth_columns(dataset)
+    dataset_enriched = add_yoy_growth_columns(dataset_enriched)
 
     # 모멘텀 수익률 계산 (가격 이력 필요)
-    momentum_df = _calculate_momentum_returns(dataset, repo.conn)
-    dataset = dataset.merge(
+    momentum_df = _calculate_momentum_returns(dataset_enriched, repo.conn)
+    dataset_enriched = dataset_enriched.merge(
         momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]],
         on="stock_code",
         how="left"
     )
     log.info("growth_momentum_calculated", growth_cols_added=True, momentum_cols_added=True)
 
-    # Stage 1
-    s1 = stage1_filter(dataset)
-    log.info("stage1_done", pass_count=len(s1))
-
     # Stage 2
-    s2 = stage2_score(s1)
+    s2 = stage2_score(dataset_enriched)
     log.info("stage2_done")
 
     # Stage 3

@@ -84,7 +84,19 @@ class GeminiClient:
         response = self._genai_model.generate_content(prompt)
         self._last_call_time = time.time()
 
-        text: str = getattr(response, "text", "") or ""
+        # [안정성] 응답 후보(candidates)가 없거나 필터링된 경우 처리
+        if not response.candidates:
+            log.warning("gemini_no_candidates", model=self._model_name)
+            raise GeminiClientError("Gemini 응답 후보가 없습니다. (안전 필터 등에 의해 차단되었을 수 있음)")
+
+        text: str = ""
+        try:
+            text = response.text
+        except ValueError:
+            # response.text 접근 시 필터링된 경우 ValueError 발생 가능
+            log.warning("gemini_text_access_failed", model=self._model_name)
+            raise GeminiClientError("Gemini 응답 텍스트에 접근할 수 없습니다. (차단된 콘텐츠)")
+
         if not text:
             raise GeminiClientError("Gemini 응답 텍스트가 비어 있습니다.")
 
