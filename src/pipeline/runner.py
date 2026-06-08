@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
+from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
@@ -554,7 +554,7 @@ def _parse_args() -> argparse.Namespace:
         help="실행 기준일 (YYYY-MM-DD 또는 'today'). 기본값: today",
     )
     # GitHub Actions(CI 환경)에서만 업로드, 로컬에서는 기본 비활성화
-    default_no_upload = not os.getenv("CI", "").lower() in ("true", "1")
+    default_no_upload = os.getenv("CI", "").lower() not in ("true", "1")
     parser.add_argument(
         "--no-upload",
         action="store_true",

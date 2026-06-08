@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from collections.abc import Iterable, Mapping
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd

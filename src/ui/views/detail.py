@@ -1,18 +1,16 @@
 """종목 상세 페이지 — 점수 레이더, 리스크 플래그, 재무 테이블, 주가 차트."""
 from __future__ import annotations
 
-from typing import Any
 from datetime import UTC, datetime
-
+from typing import Any
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from src.ui.components.radar_chart import render_radar
-from src.ui.data_loader import load_rankings, load_stock_detail
-from src.ui.metric_guides import metric_help
 from src.ui.data_loader import load_ai_insight, load_rankings, load_stock_detail
+from src.ui.metric_guides import metric_help
 
 _RADAR_DIMS = [
     ("value_score", "가치"),
