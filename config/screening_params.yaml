@@ -37,5 +37,5 @@ stage4:
 ai_analysis:
   enabled: true
   top_n: 30                         # Gemini 분석 대상 상위 N개
-  model: gemini-1.5-flash
+  model: gemini-2.0-flash           # 1.5-flash 대신 가용한 2.0-flash 사용
   rate_limit_sleep: 4               # 요청 간 대기 시간(초)
