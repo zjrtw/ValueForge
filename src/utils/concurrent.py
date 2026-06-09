@@ -11,7 +11,6 @@ def parallel_map[T, R](
     items: Iterable[T],
     *,
     max_workers: int = 4,
-    chunk_size: int = 1,
 ) -> Iterator[R]:
     """Rate limit을 준수하면서 items에 대해 func을 병렬 실행한다.
 
