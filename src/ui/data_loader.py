@@ -11,6 +11,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.db.schema import migrate_schema
 from src.storage.downloader import download_latest_db, get_metadata
 
 
@@ -22,6 +23,17 @@ def get_db_connection() -> sqlite3.Connection:
     local_db = project_root / ".local" / "valueforge_latest.db"
     
     db_path = str(local_db) if local_db.exists() else str(download_latest_db())
+
+    # [안정성] 스키마 마이그레이션 (ai_insights 테이블 등 누락 방지)
+    # UI는 기본적으로 읽기 전용 권한일 수 있으나, 로컬 환경에서는 쓰기 권한이 필요할 수 있음
+    # 여기서는 테이블 존재 여부만 보장하기 위해 마이그레이션 실행
+    try:
+        tmp_conn = sqlite3.connect(db_path)
+        migrate_schema(tmp_conn)
+        tmp_conn.close()
+    except Exception:
+        # 권한 문제 등으로 실패할 경우 로그만 남기고 진행
+        pass
 
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
     conn.row_factory = sqlite3.Row
