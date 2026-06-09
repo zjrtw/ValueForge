@@ -64,6 +64,7 @@ def run_pipeline(
     _db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(_db_path))
+    migrate_schema(conn)  # [안정성] 실행 전 최신 스키마(v3 등) 적용
     repo = Repository(conn)
     stats: dict = {}
 
