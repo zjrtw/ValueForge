@@ -361,6 +361,10 @@ def render() -> None:
     display_cols = [c for c in cols_to_use if c in df.columns]
     df_display = df[display_cols].copy()
 
+    # 종목코드를 상세 페이지 링크로 변환
+    if "stock_code" in df_display.columns:
+        df_display["stock_code"] = df_display["stock_code"].apply(lambda c: f"?code={c}")
+
     # stage1_pass를 O/X로 표시
     if "stage1_pass" in df_display.columns:
         df_display["stage1_pass"] = df_display["stage1_pass"].apply(
@@ -381,11 +385,14 @@ def render() -> None:
 
     df_display = df_display.rename(columns=_COL_LABELS)
 
+    col_config = build_ranking_column_config(df_display.columns.tolist())
+    col_config["종목코드"] = st.column_config.LinkColumn("종목코드", display_text=r"\?code=(.+)")
+
     st.dataframe(
         df_display,
         use_container_width=True,
         hide_index=True,
-        column_config=build_ranking_column_config(df_display.columns.tolist()),
+        column_config=col_config,
     )
 
     col_caption, col_download = st.columns([5, 1])

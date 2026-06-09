@@ -17,18 +17,21 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
-from src.collectors.dart_corporate_info import fetch_disclosure_dates, fetch_major_shareholders
-from src.collectors.dart_news import summarize_disclosure_news
 from src.analysis.ai_analyst import generate_investment_analysis
+from src.collectors.dart_corporate_info import fetch_disclosure_dates, fetch_major_shareholders
+from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
+from src.collectors.dart_news import summarize_disclosure_news
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
+from src.db.schema import migrate_schema
+from src.scoring.growth_scorer import add_yoy_growth_columns
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
+from src.screening.stage5_ai_analysis import stage5_ai_analysis
 from src.storage.uploader import R2Uploader
 from src.utils.config import settings
 from src.utils.error_handling import check_collection_threshold
@@ -64,6 +67,7 @@ def run_pipeline(
     _db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(_db_path))
+    migrate_schema(conn)  # [안정성] 실행 전 최신 스키마(v3 등) 적용
     repo = Repository(conn)
     stats: dict = {}
 
@@ -92,13 +96,18 @@ def run_pipeline(
         # ── Phase 3: 결과 저장 ─────────────────────────────────────────────
         _write_results(repo, run_date, stage3_all, ranked)
 
+        # ── Phase 3-5: Stage 5 AI 정성 분석 (AI_API_KEY 설정 시 실행) ──
+        ai_insights_count = _run_stage5(conn, ranked, run_date.isoformat())
+        stats["ai_insights_count"] = ai_insights_count
+
         # ── Phase 4: VACUUM / ANALYZE ──────────────────────────────────────
         conn.execute("VACUUM")
         conn.execute("ANALYZE")
         conn.commit()
         log.info("pipeline_db_optimized")
 
-        repo.record_run_success(run_date, **stats)
+        db_stats = {k: v for k, v in stats.items() if k != "ai_insights_count"}
+        repo.record_run_success(run_date, **db_stats)
         log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
 
         # ── Phase 5: R2 업로드 ─────────────────────────────────────────────
@@ -147,6 +156,11 @@ def _collect(
     # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
+    
+    # [안정성] 모든 종목 코드를 6자리 문자열로 정규화 (FK 제약 위반 방지)
+    if not tickers.empty:
+        tickers["stock_code"] = tickers["stock_code"].astype(str).str.zfill(6)
+        
     log.info("collect_tickers_done", count=len(tickers))
 
     # 4. DART에서 회사 정보 및 업종 정보 수집 (먼저 수집해서 stocks에 저장)
@@ -197,6 +211,10 @@ def _collect(
     repo.upsert_stocks(tickers)
 
     # 2. 일별 주가 (stocks FK 제약이 있으므로 이후에)
+    # 1-1. stocks 선삽입 — prices FK 제약 충족을 위해 기본 정보로 먼저 저장
+    repo.upsert_stocks(tickers)
+
+    # 2. 일별 주가
     log.info("collect_prices_start")
     prices = fetch_daily_price_data(run_date, tickers)
     n_collected = len(tickers)
@@ -212,8 +230,9 @@ def _collect(
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
-        # bps가 없으면 자체 계산 (total_equity / shares_outstanding)
+        # bps/eps가 없으면 자체 계산
         fundamentals = _calculate_missing_bps(fundamentals, tickers)
+        fundamentals = _calculate_missing_eps(fundamentals, tickers)
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
     else:
@@ -247,29 +266,46 @@ def _screen(
     dataset = repo.get_screening_dataset(run_date)
     log.info("screen_dataset_loaded", rows=len(dataset))
 
+    # Stage 1 필터링 (가장 가벼운 필터 먼저 수행)
+    s1 = stage1_filter(dataset)
+    log.info("stage1_done", pass_count=len(s1))
+
+    if s1.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # ── [최적화] Stage 1 통과 종목에 대해서만 DART 메타데이터(섹터 등) 수집 ──
+    log.info("collect_company_metadata_start", target_count=len(s1))
+    company_meta = fetch_company_metadata(s1)
+    if not company_meta.empty:
+        meta_sector = company_meta[["stock_code", "sector"]].copy()
+        s1 = s1.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
+        if "sector_meta" in s1.columns:
+            s1["sector"] = s1["sector_meta"].fillna(s1["sector"])
+            s1 = s1.drop(columns=["sector_meta"])
+        
+        # stocks 테이블에도 수집된 섹터 정보 업데이트
+        repo.upsert_stocks(s1[["stock_code", "stock_name", "market", "sector"]])
+        log.info("collect_company_metadata_done", count=len(company_meta))
+    else:
+        log.warning("collect_company_metadata_empty")
+
     # 다년도 재무 컬럼 추가 (Stage 3 함정 감지용)
-    dataset = _enrich_multiyear(dataset, repo.conn)
+    dataset_enriched = _enrich_multiyear(s1, repo.conn)
 
     # YoY 성장률 컬럼 추가 (Stage 2 성장 점수 계산용)
-    from src.scoring.growth_scorer import add_yoy_growth_columns
-
-    dataset = add_yoy_growth_columns(dataset)
+    dataset_enriched = add_yoy_growth_columns(dataset_enriched)
 
     # 모멘텀 수익률 계산 (가격 이력 필요)
-    momentum_df = _calculate_momentum_returns(dataset, repo.conn)
-    dataset = dataset.merge(
+    momentum_df = _calculate_momentum_returns(dataset_enriched, repo.conn)
+    dataset_enriched = dataset_enriched.merge(
         momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]],
         on="stock_code",
         how="left"
     )
     log.info("growth_momentum_calculated", growth_cols_added=True, momentum_cols_added=True)
 
-    # Stage 1
-    s1 = stage1_filter(dataset)
-    log.info("stage1_done", pass_count=len(s1))
-
     # Stage 2
-    s2 = stage2_score(s1)
+    s2 = stage2_score(dataset_enriched)
     log.info("stage2_done")
 
     # Stage 3
@@ -346,13 +382,15 @@ def _upload(
 
 def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFrame:
     """Stage 3 함정 감지용 다년도 컬럼(yr1/yr2/yr3)을 추가한다."""
+    fundamental_columns = {row[1] for row in conn.execute("PRAGMA table_info(fundamentals)")}
+    dps_expr = "dps" if "dps" in fundamental_columns else "NULL AS dps"
     query = """
         SELECT stock_code, fiscal_year,
-               operating_profit, free_cash_flow, operating_margin, dps
+               operating_profit, free_cash_flow, operating_margin, {dps_expr}
         FROM fundamentals
         WHERE fiscal_quarter = 0
         ORDER BY stock_code, fiscal_year DESC
-    """
+    """.format(dps_expr=dps_expr)
     hist = pd.read_sql_query(query, conn)
     if hist.empty:
         return df
@@ -409,6 +447,32 @@ def _calculate_momentum_returns(
     # 모멘텀 수익률 계산
     momentum_df = latest_momentum_returns(prices_df)
     return momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]]
+
+
+def _calculate_missing_eps(
+    fundamentals: pd.DataFrame,
+    tickers: pd.DataFrame,
+) -> pd.DataFrame:
+    """eps(주당순이익)가 없으면 net_profit / shares_outstanding으로 계산한다."""
+    result = fundamentals.copy()
+    if "eps" not in result.columns or "net_profit" not in result.columns:
+        return result
+
+    missing_eps = result["eps"].isna() & result["net_profit"].notna()
+    if not missing_eps.any():
+        return result
+
+    ticker_shares = tickers[["stock_code", "shares_outstanding"]].copy()
+    result = result.merge(ticker_shares, on="stock_code", how="left")
+
+    result.loc[missing_eps, "eps"] = (
+        result.loc[missing_eps, "net_profit"] / result.loc[missing_eps, "shares_outstanding"]
+    )
+
+    result = result.drop(columns=["shares_outstanding"], errors="ignore")
+
+    log.info("eps_calculated", calculated=int(missing_eps.sum()))
+    return result
 
 
 def _calculate_missing_bps(
@@ -543,7 +607,7 @@ def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) ->
 
     반환: stock_code, score_change_20d, score_volatility
     """
-    if not stock_codes:
+    if len(stock_codes) == 0:
         return pd.DataFrame(columns=["stock_code", "score_change_20d", "score_volatility"])
 
     from src.db.repository import Repository
@@ -685,6 +749,25 @@ def _highest_severity(row: pd.Series) -> str | None:
     return None
 
 
+def _run_stage5(
+    conn: sqlite3.Connection,
+    ranked: pd.DataFrame,
+    run_date_str: str,
+) -> int:
+    """Stage 5 AI 분석을 실행하고 저장된 인사이트 수를 반환한다.
+
+    실패해도 예외를 전파하지 않아 전체 파이프라인이 중단되지 않는다.
+    """
+    try:
+        count = stage5_ai_analysis(ranked, conn, run_date_str)
+        if count > 0:
+            log.info("stage5_done", ai_insights_saved=count)
+        return count
+    except Exception as exc:
+        log.warning("stage5_failed", error=str(exc))
+        return 0
+
+
 def _default_db_path(run_date: date) -> Path:
     tmp = Path(tempfile.gettempdir())
     return tmp / _DB_FILENAME_TEMPLATE.format(date=run_date.isoformat())
@@ -705,7 +788,7 @@ def _parse_args() -> argparse.Namespace:
         help="실행 기준일 (YYYY-MM-DD 또는 'today'). 기본값: today",
     )
     # GitHub Actions(CI 환경)에서만 업로드, 로컬에서는 기본 비활성화
-    default_no_upload = not os.getenv("CI", "").lower() in ("true", "1")
+    default_no_upload = os.getenv("CI", "").lower() not in ("true", "1")
     parser.add_argument(
         "--no-upload",
         action="store_true",

@@ -90,6 +90,21 @@ R2_BUCKET_NAME=valueforge
 
 ## 선택 변수
 
+### AI_API_KEY
+
+| 항목 | 내용 |
+|---|---|
+| 필수 여부 | 선택 |
+| 기본값 | 없음 (미설정 시 Stage 5 건너뜀) |
+| 발급 | [Google AI Studio](https://aistudio.google.com/app/apikey) (무료 티어 지원) |
+| 용도 | Stage 5 AI 정성 분석 — 상위 30개 종목 뉴스 수집 후 Gemini로 투자 가이드 생성 |
+
+```bash
+AI_API_KEY=AIza...
+```
+
+---
+
 ### MAX_TICKERS
 
 | 항목 | 내용 |
@@ -211,6 +226,7 @@ PRESERVE_DB=true        # 운영 환경 (DB 유지, DART 캐시 활용)
 | `R2_ACCESS_KEY_ID` | ✅ 읽기+쓰기 | ✅ 읽기 전용 | ✅ 읽기+쓰기 |
 | `R2_SECRET_ACCESS_KEY` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
 | `R2_BUCKET_NAME` | 선택 | 선택 | 선택 |
+| `AI_API_KEY` | 선택 | ❌ 불필요 | 선택 |
 | `MAX_TICKERS` | 선택 (`0`) | ❌ 불필요 | 권장 (`50`) |
 | `LOG_LEVEL` | 선택 (`INFO`) | ❌ 불필요 | 선택 (`DEBUG`) |
 | `DB_PATH` | 선택 | ❌ 불필요 | 선택 |

@@ -1,7 +1,7 @@
 import json
 import sqlite3
 from collections.abc import Iterable, Mapping
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import pandas as pd
@@ -32,6 +32,7 @@ PRICE_COLUMNS = [
     "low",
     "close",
     "volume",
+    "trading_value",
     "market_cap",
     "per",
     "pbr",
@@ -119,6 +120,15 @@ RISK_FLAG_COLUMNS = [
     "severity",
     "metric_value",
     "threshold_value",
+]
+
+AI_INSIGHT_COLUMNS = [
+    "ticker",
+    "run_date",
+    "guide_text",
+    "sentiment",
+    "generated_at",
+    "model_used",
 ]
 
 
@@ -209,11 +219,11 @@ class Repository:
             """
             INSERT INTO prices (
                 stock_code, date, open, high, low, close, volume,
-                market_cap, per, pbr, dividend_yield
+                trading_value, market_cap, per, pbr, dividend_yield
             )
             VALUES (
                 :stock_code, :date, :open, :high, :low, :close, :volume,
-                :market_cap, :per, :pbr, :dividend_yield
+                :trading_value, :market_cap, :per, :pbr, :dividend_yield
             )
             ON CONFLICT(stock_code, date) DO UPDATE SET
                 open = excluded.open,
@@ -221,6 +231,7 @@ class Repository:
                 low = excluded.low,
                 close = excluded.close,
                 volume = excluded.volume,
+                trading_value = excluded.trading_value,
                 market_cap = excluded.market_cap,
                 per = excluded.per,
                 pbr = excluded.pbr,
@@ -329,14 +340,16 @@ class Repository:
             WITH avg_trading_value AS (
                 SELECT
                     stock_code,
-                    AVG(close * volume) AS avg_trading_value_20d
+                    AVG(val) AS avg_trading_value_20d
                 FROM (
                     SELECT
-                        stock_code, close, volume,
+                        stock_code,
+                        COALESCE(trading_value, close * volume) AS val,
                         ROW_NUMBER() OVER (
                             PARTITION BY stock_code ORDER BY date DESC
                         ) AS rn
                     FROM prices
+                    {price_date_filter}
                 )
                 WHERE rn <= 20
                 GROUP BY stock_code
@@ -543,6 +556,43 @@ class Repository:
                 records,
             )
         return len(records)
+
+    def upsert_ai_insights(self, rows: pd.DataFrame | Iterable[Mapping[str, Any]]) -> int:
+        records = _records(rows, AI_INSIGHT_COLUMNS)
+        if not records:
+            return 0
+
+        self.conn.executemany(
+            """
+            INSERT INTO ai_insights (
+                ticker, run_date, guide_text, sentiment, generated_at, model_used
+            )
+            VALUES (
+                :ticker, :run_date, :guide_text, :sentiment, :generated_at, :model_used
+            )
+            ON CONFLICT(ticker, run_date) DO UPDATE SET
+                guide_text = excluded.guide_text,
+                sentiment = excluded.sentiment,
+                generated_at = excluded.generated_at,
+                model_used = excluded.model_used
+            """,
+            records,
+        )
+        self.conn.commit()
+        return len(records)
+
+    def get_ai_insight(self, ticker: str, run_date: str) -> dict[str, Any] | None:
+        row = self.conn.execute(
+            """
+            SELECT ticker, run_date, guide_text, sentiment, generated_at, model_used
+            FROM ai_insights
+            WHERE ticker = ? AND run_date = ?
+            """,
+            (ticker, run_date),
+        ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(AI_INSIGHT_COLUMNS, row, strict=True))
 
     def record_run_start(
         self,

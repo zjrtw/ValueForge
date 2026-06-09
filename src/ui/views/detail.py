@@ -1,6 +1,7 @@
 """종목 상세 페이지 — 점수 레이더, 리스크 플래그, 재무 테이블, 주가 차트."""
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
@@ -8,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.ui.components.radar_chart import render_radar
-from src.ui.data_loader import load_rankings, load_stock_detail
+from src.ui.data_loader import load_ai_insight, load_rankings, load_stock_detail
 from src.ui.metric_guides import metric_help
 
 _RADAR_DIMS = [
@@ -31,6 +32,9 @@ _FLAG_TYPE_KR = {
     "NEGATIVE_FCF": "음의FCF",
 }
 
+_SENTIMENT_BADGE = {"긍정": "🟢 긍정", "부정": "🔴 부정", "중립": "🟡 중립"}
+_STALE_THRESHOLD_DAYS = 7
+
 _FUNDAMENTAL_COLS = {
     "fiscal_year": "회계연도",
     "fiscal_quarter": "분기",
@@ -43,6 +47,15 @@ _FUNDAMENTAL_COLS = {
     "operating_margin": "영업이익률",
     "current_ratio": "유동비율",
 }
+
+
+def ai_insight_age_days(generated_at: str) -> int | None:
+    """generated_at ISO 문자열에서 경과 일수를 반환한다. 파싱 실패 시 None."""
+    try:
+        dt = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        return (datetime.now(UTC) - dt).days
+    except Exception:
+        return None
 
 
 def build_radar_data(scores_row: pd.Series) -> dict[str, float]:
@@ -246,3 +259,29 @@ def render(stock_code: str | None = None) -> None:
         )
     else:
         st.info("주가 데이터 없음")
+
+    # ── AI 투자 가이드 ───────────────────────────────────────────────────────
+    insight = load_ai_insight(stock_code)
+    if insight:
+        st.divider()
+        st.subheader("AI 투자 가이드")
+
+        generated_at = insight.get("generated_at") or ""
+        age = ai_insight_age_days(generated_at)
+        if age is not None and age >= _STALE_THRESHOLD_DAYS:
+            st.warning(
+                f"이 가이드는 {age}일 전에 생성되었습니다. 최신 시황을 반영하지 않을 수 있습니다."
+            )
+
+        sentiment = insight.get("sentiment", "중립")
+        badge = _SENTIMENT_BADGE.get(sentiment, "⚪ 알수없음")
+        model = insight.get("model_used", "")
+        run_date = insight.get("run_date", "")
+
+        col_badge, col_meta = st.columns([1, 4])
+        with col_badge:
+            st.markdown(f"**{badge}**")
+        with col_meta:
+            st.caption(f"생성일: {run_date} · 모델: {model}")
+
+        st.info(insight.get("guide_text", ""))

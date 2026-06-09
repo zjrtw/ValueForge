@@ -120,6 +120,13 @@ def _fundamentals() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _company_meta() -> pd.DataFrame:
+    return pd.DataFrame([
+        {"stock_code": c, "stock_name_en": f"Corp{c}", "sector": "제조"}
+        for c in _ALL_CODES
+    ])
+
+
 # ── 파이프라인 실행 픽스처 ─────────────────────────────────────────────────────
 
 def _run_pipeline_no_upload(db_path: Path) -> dict:
@@ -128,6 +135,7 @@ def _run_pipeline_no_upload(db_path: Path) -> dict:
         patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
+        patch("src.pipeline.runner.fetch_company_metadata", return_value=_company_meta()),
     ):
         return run_pipeline(_RUN_DATE, db_path=db_path, upload=False)
 
@@ -384,6 +392,7 @@ class E2EWithUploadTest(unittest.TestCase):
             patch("src.pipeline.runner.fetch_ticker_list", return_value=_tickers()),
             patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
             patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
+            patch("src.pipeline.runner.fetch_company_metadata", return_value=_company_meta()),
             patch("src.pipeline.runner.R2Uploader", side_effect=_get_mocked_uploader),
         ):
             return run_pipeline(_RUN_DATE, db_path=self._db_path, upload=True)
