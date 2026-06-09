@@ -1,12 +1,12 @@
 # 스크리닝 파라미터 — 코드 수정 없이 이 파일에서 조정
 # Stage 1 필터
 stage1:
-  min_market_cap_billion: 30        # 최소 시가총액 (억 원)
+  min_market_cap_billion: 30 # 최소 시가총액 (억 원)
   min_avg_daily_volume_million: 500 # 최소 20일 평균 거래대금 (백만 원)
-  max_per: 50.0                     # 최대 PER (음수 PER 종목 제외)
+  max_per: 50.0 # 최대 PER (음수 PER 종목 제외)
   min_per: 0.0
-  max_pbr: 10.0                     # 최대 PBR
-  min_listed_days: 180              # 최소 상장 기간 (일) — return_6m 계산 기준
+  max_pbr: 10.0 # 최대 PBR
+  min_listed_days: 180 # 최소 상장 기간 (일) — return_6m 계산 기준
 
 # Stage 2 스코어 가중치 (합계 = 1.0)
 stage2_weights:
@@ -19,11 +19,11 @@ stage2_weights:
 # Stage 3 함정 감지 임계값
 stage3:
   # 부채 관련
-  max_debt_ratio: 300.0             # 최대 부채비율 (%)
-  min_interest_coverage: 1.5       # 최소 이자보상배율
+  max_debt_ratio: 300.0 # 최대 부채비율 (%)
+  min_interest_coverage: 1.5 # 최소 이자보상배율
   # 이익 품질
-  min_operating_margin: -0.05      # 최소 영업이익률
-  max_revenue_decline_pct: -0.30   # 연속 매출 감소 한계
+  min_operating_margin: -0.05 # 최소 영업이익률
+  max_revenue_decline_pct: -0.30 # 연속 매출 감소 한계
   # 지주회사 플래그
   holding_company_flag_level: LOW
 
@@ -31,11 +31,11 @@ stage3:
 stage4:
   penalty_per_medium_flag: 2.0
   penalty_per_high_flag: 5.0
-  top_n: 100                        # 최종 출력 상위 N개
+  top_n: 100 # 최종 출력 상위 N개
 
 # Stage 5 AI 정성 분석
 ai_analysis:
   enabled: true
-  top_n: 30                         # Gemini 분석 대상 상위 N개
-  model: gemini-2.0-flash           # 1.5-flash 대신 가용한 2.0-flash 사용
-  rate_limit_sleep: 4               # 요청 간 대기 시간(초)
+  top_n: 30 # Gemini 분석 대상 상위 N개
+  model: gemini-3.1-flash-lite # Gemini 3.1 Flash Lite 사용
+  rate_limit_sleep: 4 # 요청 간 대기 시간(초)

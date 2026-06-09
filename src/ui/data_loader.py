@@ -20,9 +20,15 @@ def get_db_connection() -> sqlite3.Connection:
     """로컬 DB 우선, 없으면 R2에서 다운로드 후 읽기 전용 연결을 반환한다."""
     # [안정성] 실행 위치(cwd)에 영향받지 않도록 파일 기준 절대 경로 사용
     project_root = Path(__file__).parents[2]
-    local_db = project_root / ".local" / "valueforge_latest.db"
-    
-    db_path = str(local_db) if local_db.exists() else str(download_latest_db())
+    local_pipeline_db = project_root / "data" / "valueforge_local.db"
+    r2_cached_db = project_root / ".local" / "valueforge_latest.db"
+
+    if local_pipeline_db.exists():
+        db_path = str(local_pipeline_db)
+    elif r2_cached_db.exists():
+        db_path = str(r2_cached_db)
+    else:
+        db_path = str(download_latest_db())
 
     # [안정성] 스키마 마이그레이션 (ai_insights 테이블 등 누락 방지)
     # UI는 기본적으로 읽기 전용 권한일 수 있으나, 로컬 환경에서는 쓰기 권한이 필요할 수 있음

@@ -93,7 +93,7 @@ def run_pipeline(
         # ── Phase 3: 결과 저장 ─────────────────────────────────────────────
         _write_results(repo, run_date, stage3_all, ranked)
 
-        # ── Phase 3-5: Stage 5 AI 정성 분석 (GEMINI_API_KEY 설정 시 실행) ──
+        # ── Phase 3-5: Stage 5 AI 정성 분석 (AI_API_KEY 설정 시 실행) ──
         ai_insights_count = _run_stage5(conn, ranked, run_date.isoformat())
         stats["ai_insights_count"] = ai_insights_count
 
@@ -179,8 +179,9 @@ def _collect(
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
-        # bps가 없으면 자체 계산 (total_equity / shares_outstanding)
+        # bps/eps가 없으면 자체 계산
         fundamentals = _calculate_missing_bps(fundamentals, tickers)
+        fundamentals = _calculate_missing_eps(fundamentals, tickers)
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
     else:
@@ -387,6 +388,30 @@ def _calculate_momentum_returns(
     # 모멘텀 수익률 계산
     momentum_df = latest_momentum_returns(prices_df)
     return momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]]
+
+
+def _calculate_missing_eps(
+    fundamentals: pd.DataFrame,
+    tickers: pd.DataFrame,
+) -> pd.DataFrame:
+    """eps(주당순이익)가 없으면 net_profit / shares_outstanding으로 계산한다."""
+    result = fundamentals.copy()
+
+    missing_eps = result["eps"].isna() & result["net_profit"].notna()
+    if not missing_eps.any():
+        return result
+
+    ticker_shares = tickers[["stock_code", "shares_outstanding"]].copy()
+    result = result.merge(ticker_shares, on="stock_code", how="left")
+
+    result.loc[missing_eps, "eps"] = (
+        result.loc[missing_eps, "net_profit"] / result.loc[missing_eps, "shares_outstanding"]
+    )
+
+    result = result.drop(columns=["shares_outstanding"], errors="ignore")
+
+    log.info("eps_calculated", calculated=int(missing_eps.sum()))
+    return result
 
 
 def _calculate_missing_bps(
