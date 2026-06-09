@@ -1,7 +1,26 @@
 import sqlite3
 
-SCHEMA_VERSION = 1
-MIGRATIONS: dict[int, str] = {}
+SCHEMA_VERSION = 3
+MIGRATIONS: dict[int, str] = {
+    2: """
+CREATE TABLE IF NOT EXISTS ai_insights (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker          TEXT NOT NULL,
+    run_date        TEXT NOT NULL,
+    guide_text      TEXT,
+    sentiment       TEXT CHECK (sentiment IN ('긍정', '중립', '부정')),
+    generated_at    TEXT,
+    model_used      TEXT,
+    FOREIGN KEY (ticker) REFERENCES stocks(stock_code),
+    UNIQUE (ticker, run_date)
+);
+CREATE INDEX IF NOT EXISTS idx_ai_insights_run_date
+    ON ai_insights (run_date DESC, ticker);
+""",
+    3: """
+ALTER TABLE prices ADD COLUMN trading_value REAL;
+""",
+}
 
 PRAGMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -33,6 +52,7 @@ CREATE TABLE IF NOT EXISTS prices (
     low                 REAL,
     close               REAL NOT NULL,
     volume              INTEGER,
+    trading_value       REAL,
     market_cap          REAL,
     per                 REAL,
     pbr                 REAL,
@@ -135,6 +155,18 @@ CREATE TABLE IF NOT EXISTS rankings (
     UNIQUE (run_date, stock_code)
 );
 
+CREATE TABLE IF NOT EXISTS ai_insights (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker          TEXT NOT NULL,
+    run_date        TEXT NOT NULL,
+    guide_text      TEXT,
+    sentiment       TEXT CHECK (sentiment IN ('긍정', '중립', '부정')),
+    generated_at    TEXT,
+    model_used      TEXT,
+    FOREIGN KEY (ticker) REFERENCES stocks(stock_code),
+    UNIQUE (ticker, run_date)
+);
+
 CREATE TABLE IF NOT EXISTS pipeline_runs (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     run_date            TEXT NOT NULL UNIQUE,
@@ -180,6 +212,9 @@ CREATE INDEX IF NOT EXISTS idx_rankings_sector
 
 CREATE INDEX IF NOT EXISTS idx_stocks_market
     ON stocks (market, is_active);
+
+CREATE INDEX IF NOT EXISTS idx_ai_insights_run_date
+    ON ai_insights (run_date DESC, ticker);
 """
 
 MIGRATION_TABLE_SQL = """

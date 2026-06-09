@@ -46,5 +46,8 @@ htmlcov/
 tmp-test/
 .local/
 
+docs_cache/
+*.pkl
+
 # Streamlit
 .streamlit/secrets.toml

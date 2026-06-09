@@ -17,15 +17,17 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.collectors.dart_financials import fetch_financial_statements, fetch_company_metadata
+from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
+from src.scoring.growth_scorer import add_yoy_growth_columns
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
 from src.screening.stage3_trap_detector import FLAG_SPECS, stage3_detect_traps
 from src.screening.stage4_ranker import stage4_rank
+from src.screening.stage5_ai_analysis import stage5_ai_analysis
 from src.storage.uploader import R2Uploader
 from src.utils.config import settings
 from src.utils.error_handling import check_collection_threshold
@@ -89,13 +91,18 @@ def run_pipeline(
         # ── Phase 3: 결과 저장 ─────────────────────────────────────────────
         _write_results(repo, run_date, stage3_all, ranked)
 
+        # ── Phase 3-5: Stage 5 AI 정성 분석 (GEMINI_API_KEY 설정 시 실행) ──
+        ai_insights_count = _run_stage5(conn, ranked, run_date.isoformat())
+        stats["ai_insights_count"] = ai_insights_count
+
         # ── Phase 4: VACUUM / ANALYZE ──────────────────────────────────────
         conn.execute("VACUUM")
         conn.execute("ANALYZE")
         conn.commit()
         log.info("pipeline_db_optimized")
 
-        repo.record_run_success(run_date, **stats)
+        db_stats = {k: v for k, v in stats.items() if k != "ai_insights_count"}
+        repo.record_run_success(run_date, **db_stats)
         log.info("pipeline_success", run_date=run_date.isoformat(), **stats)
 
         # ── Phase 5: R2 업로드 ─────────────────────────────────────────────
@@ -146,6 +153,9 @@ def _collect(
     tickers = fetch_ticker_list(run_date.isoformat())
     log.info("collect_tickers_done", count=len(tickers))
 
+    # 1-1. stocks 선삽입 — prices FK 제약 충족을 위해 기본 정보로 먼저 저장
+    repo.upsert_stocks(tickers)
+
     # 2. 일별 주가
     log.info("collect_prices_start")
     prices = fetch_daily_price_data(run_date, tickers)
@@ -157,23 +167,6 @@ def _collect(
     else:
         log.warning("collect_prices_empty")
         n_errors = n_collected
-
-    # 4. DART에서 회사 정보 및 업종 정보 수집
-    log.info("collect_company_metadata_start")
-    company_meta = fetch_company_metadata(tickers)
-    if not company_meta.empty:
-        # tickers에 sector 정보 병합
-        meta_sector = company_meta[["stock_code", "sector"]].copy()
-        tickers = tickers.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
-        # 새로 수집한 sector가 있으면 사용, 없으면 기존 값 유지
-        if "sector_meta" in tickers.columns:
-            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
-            tickers = tickers.drop(columns=["sector_meta"])
-        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
-    else:
-        log.warning("collect_company_metadata_empty")
-
-    repo.upsert_stocks(tickers)
 
     # 3. DART 재무 데이터
     log.info("collect_fundamentals_start")
@@ -214,29 +207,46 @@ def _screen(
     dataset = repo.get_screening_dataset(run_date)
     log.info("screen_dataset_loaded", rows=len(dataset))
 
+    # Stage 1 필터링 (가장 가벼운 필터 먼저 수행)
+    s1 = stage1_filter(dataset)
+    log.info("stage1_done", pass_count=len(s1))
+
+    if s1.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # ── [최적화] Stage 1 통과 종목에 대해서만 DART 메타데이터(섹터 등) 수집 ──
+    log.info("collect_company_metadata_start", target_count=len(s1))
+    company_meta = fetch_company_metadata(s1)
+    if not company_meta.empty:
+        meta_sector = company_meta[["stock_code", "sector"]].copy()
+        s1 = s1.merge(meta_sector, on="stock_code", how="left", suffixes=("", "_meta"))
+        if "sector_meta" in s1.columns:
+            s1["sector"] = s1["sector_meta"].fillna(s1["sector"])
+            s1 = s1.drop(columns=["sector_meta"])
+        
+        # stocks 테이블에도 수집된 섹터 정보 업데이트
+        repo.upsert_stocks(s1[["stock_code", "stock_name", "market", "sector"]])
+        log.info("collect_company_metadata_done", count=len(company_meta))
+    else:
+        log.warning("collect_company_metadata_empty")
+
     # 다년도 재무 컬럼 추가 (Stage 3 함정 감지용)
-    dataset = _enrich_multiyear(dataset, repo.conn)
+    dataset_enriched = _enrich_multiyear(s1, repo.conn)
 
     # YoY 성장률 컬럼 추가 (Stage 2 성장 점수 계산용)
-    from src.scoring.growth_scorer import add_yoy_growth_columns
-
-    dataset = add_yoy_growth_columns(dataset)
+    dataset_enriched = add_yoy_growth_columns(dataset_enriched)
 
     # 모멘텀 수익률 계산 (가격 이력 필요)
-    momentum_df = _calculate_momentum_returns(dataset, repo.conn)
-    dataset = dataset.merge(
+    momentum_df = _calculate_momentum_returns(dataset_enriched, repo.conn)
+    dataset_enriched = dataset_enriched.merge(
         momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]],
         on="stock_code",
         how="left"
     )
     log.info("growth_momentum_calculated", growth_cols_added=True, momentum_cols_added=True)
 
-    # Stage 1
-    s1 = stage1_filter(dataset)
-    log.info("stage1_done", pass_count=len(s1))
-
     # Stage 2
-    s2 = stage2_score(s1)
+    s2 = stage2_score(dataset_enriched)
     log.info("stage2_done")
 
     # Stage 3
@@ -506,6 +516,25 @@ def _highest_severity(row: pd.Series) -> str | None:
     return None
 
 
+def _run_stage5(
+    conn: sqlite3.Connection,
+    ranked: pd.DataFrame,
+    run_date_str: str,
+) -> int:
+    """Stage 5 AI 분석을 실행하고 저장된 인사이트 수를 반환한다.
+
+    실패해도 예외를 전파하지 않아 전체 파이프라인이 중단되지 않는다.
+    """
+    try:
+        count = stage5_ai_analysis(ranked, conn, run_date_str)
+        if count > 0:
+            log.info("stage5_done", ai_insights_saved=count)
+        return count
+    except Exception as exc:
+        log.warning("stage5_failed", error=str(exc))
+        return 0
+
+
 def _default_db_path(run_date: date) -> Path:
     tmp = Path(tempfile.gettempdir())
     return tmp / _DB_FILENAME_TEMPLATE.format(date=run_date.isoformat())
@@ -526,7 +555,7 @@ def _parse_args() -> argparse.Namespace:
         help="실행 기준일 (YYYY-MM-DD 또는 'today'). 기본값: today",
     )
     # GitHub Actions(CI 환경)에서만 업로드, 로컬에서는 기본 비활성화
-    default_no_upload = not os.getenv("CI", "").lower() in ("true", "1")
+    default_no_upload = os.getenv("CI", "").lower() not in ("true", "1")
     parser.add_argument(
         "--no-upload",
         action="store_true",

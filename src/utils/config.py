@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "valueforge"
 
+    # Google Gemini API (V2 AI 정성 분석 — 미설정 시 Stage 5 자동 건너뜀)
+    AI_API_KEY: str = ""
+
     # 파이프라인 설정
     MAX_TICKERS: int = Field(default=0, ge=0)
     MARKETS: str = "KOSPI,KOSDAQ"
@@ -45,6 +48,7 @@ class ScreeningParams:
         self.stage2_weights: dict = data.get("stage2_weights", {})
         self.stage3: dict = data.get("stage3", {})
         self.stage4: dict = data.get("stage4", {})
+        self.ai_analysis: dict = data.get("ai_analysis", {})
 
 
 settings = Settings()

@@ -32,3 +32,10 @@ stage4:
   penalty_per_medium_flag: 2.0
   penalty_per_high_flag: 5.0
   top_n: 100                        # 최종 출력 상위 N개
+
+# Stage 5 AI 정성 분석
+ai_analysis:
+  enabled: true
+  top_n: 30                         # Gemini 분석 대상 상위 N개
+  model: gemini-1.5-flash
+  rate_limit_sleep: 4               # 요청 간 대기 시간(초)

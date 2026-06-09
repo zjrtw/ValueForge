@@ -18,6 +18,7 @@ _mock_st.cache_data = lambda **kw: (lambda f: f)
 sys.modules.setdefault("streamlit", _mock_st)
 
 from src.ui.views.detail import (  # noqa: E402
+    ai_insight_age_days,
     build_radar_data,
     format_fundamentals,
     format_risk_flags,
@@ -227,6 +228,36 @@ class FormatFundamentalsTest(unittest.TestCase):
         result = format_fundamentals(self.df)
         # 원본 컬럼 중 매핑에 없는 stock_code는 포함되지 않아야 함
         self.assertNotIn("stock_code", result.columns)
+
+
+# ── ai_insight_age_days 테스트 ───────────────────────────────────────────────
+
+class AiInsightAgeDaysTest(unittest.TestCase):
+    def test_recent_timestamp_returns_zero(self) -> None:
+        from datetime import UTC, datetime, timedelta
+        ts = (datetime.now(UTC) - timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        result = ai_insight_age_days(ts)
+        self.assertEqual(result, 0)
+
+    def test_eight_day_old_timestamp(self) -> None:
+        from datetime import UTC, datetime, timedelta
+        ts = (datetime.now(UTC) - timedelta(days=8)).isoformat().replace("+00:00", "Z")
+        result = ai_insight_age_days(ts)
+        self.assertEqual(result, 8)
+
+    def test_invalid_string_returns_none(self) -> None:
+        result = ai_insight_age_days("not-a-date")
+        self.assertIsNone(result)
+
+    def test_empty_string_returns_none(self) -> None:
+        result = ai_insight_age_days("")
+        self.assertIsNone(result)
+
+    def test_exactly_seven_days(self) -> None:
+        from datetime import UTC, datetime, timedelta
+        ts = (datetime.now(UTC) - timedelta(days=7)).isoformat().replace("+00:00", "Z")
+        result = ai_insight_age_days(ts)
+        self.assertEqual(result, 7)
 
 
 if __name__ == "__main__":

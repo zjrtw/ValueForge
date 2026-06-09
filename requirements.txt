@@ -2,6 +2,9 @@
 opendartreader>=0.3.2
 yfinance>=0.2.40
 requests>=2.31.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+google-generativeai>=0.8.0
 
 # 데이터 처리
 pandas>=2.2.0
