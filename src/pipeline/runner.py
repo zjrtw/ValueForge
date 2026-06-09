@@ -22,6 +22,7 @@ from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
+from src.db.schema import migrate_schema
 from src.scoring.growth_scorer import add_yoy_growth_columns
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
