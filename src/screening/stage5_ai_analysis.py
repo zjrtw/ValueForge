@@ -104,7 +104,7 @@ def _build_prompt(row: pd.Series, news_articles: list[NewsArticle]) -> str:
         )
         news_section = f"\n\n## 최근 뉴스 헤드라인\n{headlines}"
     else:
-        news_section = f"\n\n## 최근 뉴스 헤드라인\n(수집된 뉴스 없음)"
+        news_section = "\n\n## 최근 뉴스 헤드라인\n(수집된 뉴스 없음)"
 
     return f"""당신은 한국 주식 투자 전문가입니다. 다음 종목 정보와 최근 뉴스를 바탕으로 투자 가이드를 작성하세요.
 

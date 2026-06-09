@@ -113,7 +113,7 @@ def fetch_avg_trading_value_20d(
     if conn is not None:
         log.info("calculating avg trading value using local DB")
         # trading_value 컬럼이 있으면 사용하고, 없으면 close * volume으로 대체
-        query = f"""
+        query = """
             SELECT stock_code, AVG(val) as avg_trading_value_20d
             FROM (
                 SELECT stock_code, 

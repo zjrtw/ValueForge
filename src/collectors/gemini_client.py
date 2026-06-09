@@ -92,10 +92,10 @@ class GeminiClient:
         text: str = ""
         try:
             text = response.text
-        except ValueError:
+        except ValueError as exc:
             # response.text 접근 시 필터링된 경우 ValueError 발생 가능
             log.warning("gemini_text_access_failed", model=self._model_name)
-            raise GeminiClientError("Gemini 응답 텍스트에 접근할 수 없습니다. (차단된 콘텐츠)")
+            raise GeminiClientError("Gemini 응답 텍스트에 접근할 수 없습니다. (차단된 콘텐츠)") from exc
 
         if not text:
             raise GeminiClientError("Gemini 응답 텍스트가 비어 있습니다.")
