@@ -1,0 +1,31 @@
+{
+  "commit_id": "67382e3caedeb327d6efd4ffdc2062efb92a8d5b",
+  "body": "파일별 상세 코드 리뷰 및 개선 제안입니다.",
+  "event": "COMMENT",
+  "comments": [
+    {
+      "path": "src/pipeline/runner.py",
+      "line": 172,
+      "side": "RIGHT",
+      "body": "### 🚀 성능 최적화 제안\n현재 모든 종목(~2,600개)에 대해 DART 회사 메타데이터를 수집하고 있습니다. \n\n**제안:** Stage 1 필터(시총, 거래대금 등)를 먼저 수행하여 대상을 약 100~300개로 압축한 뒤, 해당 종목들에 대해서만 메타데이터를 수집하도록 로직 순서를 변경해 보세요. 파이프라인 전체 실행 시간을 수 분 이상 단축할 수 있습니다."
+    },
+    {
+      "path": "src/screening/stage5_ai_analysis.py",
+      "line": 61,
+      "side": "RIGHT",
+      "body": "### 💾 DB I/O 최적화\n현재 반복문 내부에서 매번 `repo.upsert_ai_insights`를 호출하여 개별 트랜잭션이 발생하고 있습니다.\n\n**제안:** 인사이트 데이터를 리스트에 모은 뒤, 반복문이 종료된 시점에 한 번에 저장(Bulk Insert)하도록 수정하면 성능과 안정성이 크게 향상됩니다."
+    },
+    {
+      "path": "src/collectors/gemini_client.py",
+      "line": 84,
+      "side": "RIGHT",
+      "body": "### 🛡️ 안정성 개선\nGemini API 응답이 안전 필터(Safety Filter) 등에 의해 차단된 경우 `response.text` 접근 시 에러가 발생할 수 있습니다.\n\n**제안:** `response.candidates`가 존재하는지, 그리고 첫 번째 candidate에 `text`가 포함되어 있는지 먼저 확인하는 방어 코드를 추가하는 것이 좋습니다."
+    },
+    {
+      "path": "src/ui/data_loader.py",
+      "line": 19,
+      "side": "RIGHT",
+      "body": "### 📂 경로 관리 개선\n`Path.cwd()`는 앱 실행 위치에 따라 결과가 달라질 수 있어 위험할 수 있습니다.\n\n**제안:** `Path(__file__).parent` 등을 활용하여 파일 위치 기준의 절대 경로를 계산해 사용하는 것이 더 견고한 구현입니다."
+    }
+  ]
+}

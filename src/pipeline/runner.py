@@ -151,6 +151,11 @@ def _collect(
     # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
+    
+    # [안정성] 모든 종목 코드를 6자리 문자열로 정규화 (FK 제약 위반 방지)
+    if not tickers.empty:
+        tickers["stock_code"] = tickers["stock_code"].astype(str).str.zfill(6)
+        
     log.info("collect_tickers_done", count=len(tickers))
 
     # 1-1. stocks 선삽입 — prices FK 제약 충족을 위해 기본 정보로 먼저 저장
