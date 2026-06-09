@@ -28,6 +28,7 @@ PRICE_COLUMNS = [
     "low",
     "close",
     "volume",
+    "trading_value",
     "market_cap",
     "per",
     "pbr",
@@ -206,11 +207,11 @@ class Repository:
             """
             INSERT INTO prices (
                 stock_code, date, open, high, low, close, volume,
-                market_cap, per, pbr, dividend_yield
+                trading_value, market_cap, per, pbr, dividend_yield
             )
             VALUES (
                 :stock_code, :date, :open, :high, :low, :close, :volume,
-                :market_cap, :per, :pbr, :dividend_yield
+                :trading_value, :market_cap, :per, :pbr, :dividend_yield
             )
             ON CONFLICT(stock_code, date) DO UPDATE SET
                 open = excluded.open,
@@ -218,6 +219,7 @@ class Repository:
                 low = excluded.low,
                 close = excluded.close,
                 volume = excluded.volume,
+                trading_value = excluded.trading_value,
                 market_cap = excluded.market_cap,
                 per = excluded.per,
                 pbr = excluded.pbr,
@@ -326,14 +328,16 @@ class Repository:
             WITH avg_trading_value AS (
                 SELECT
                     stock_code,
-                    AVG(close * volume) AS avg_trading_value_20d
+                    AVG(val) AS avg_trading_value_20d
                 FROM (
                     SELECT
-                        stock_code, close, volume,
+                        stock_code,
+                        COALESCE(trading_value, close * volume) AS val,
                         ROW_NUMBER() OVER (
                             PARTITION BY stock_code ORDER BY date DESC
                         ) AS rn
                     FROM prices
+                    {price_date_filter}
                 )
                 WHERE rn <= 20
                 GROUP BY stock_code

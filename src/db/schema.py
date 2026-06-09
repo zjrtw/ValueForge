@@ -1,6 +1,6 @@
 import sqlite3
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MIGRATIONS: dict[int, str] = {
     2: """
 CREATE TABLE IF NOT EXISTS ai_insights (
@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS ai_insights (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_insights_run_date
     ON ai_insights (run_date DESC, ticker);
+""",
+    3: """
+ALTER TABLE prices ADD COLUMN trading_value REAL;
 """,
 }
 
@@ -49,6 +52,7 @@ CREATE TABLE IF NOT EXISTS prices (
     low                 REAL,
     close               REAL NOT NULL,
     volume              INTEGER,
+    trading_value       REAL,
     market_cap          REAL,
     per                 REAL,
     pbr                 REAL,

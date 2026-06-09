@@ -1,3 +1,4 @@
+import sqlite3
 from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 
@@ -90,18 +91,59 @@ def fetch_avg_trading_value_20d(
     tickers: pd.DataFrame | None = None,
     lookback_days: int = 30,
     window: int = 20,
+    conn: sqlite3.Connection | None = None,
 ) -> pd.DataFrame:
     """종목별 최근 20거래일 평균 거래대금을 산출한다.
 
-    날짜별 전체 시장 조회 후 각 종목별로 최신 ``window``개 거래일의 거래대금 평균을 계산한다.
+    Args:
+        base_date: 기준일
+        tickers: 대상 종목 DataFrame
+        lookback_days: API 조회 시 과거 며칠을 볼지 (DB 미사용 시)
+        window: 평균 낼 거래일 수
+        conn: SQLite 연결 (제공 시 DB에서 계산하여 성능 최적화)
 
-    반환 컬럼:
-        stock_code, date, avg_trading_value_20d
+    Returns:
+        stock_code, date, avg_trading_value_20d DataFrame
     """
     query_date_obj = _parse_date(base_date)
     output_date = query_date_obj.isoformat()
     query_date_str = query_date_obj.strftime("%Y%m%d")
 
+    # ── [최적화] DB 연결이 있는 경우 DB에서 직접 계산 ──
+    if conn is not None:
+        log.info("calculating avg trading value using local DB")
+        # trading_value 컬럼이 있으면 사용하고, 없으면 close * volume으로 대체
+        query = f"""
+            SELECT stock_code, AVG(val) as avg_trading_value_20d
+            FROM (
+                SELECT stock_code, 
+                       COALESCE(trading_value, close * volume) as val,
+                       ROW_NUMBER() OVER (PARTITION BY stock_code ORDER BY date DESC) as rn
+                FROM prices
+                WHERE date <= ?
+            )
+            WHERE rn <= ?
+            GROUP BY stock_code
+        """
+        df = pd.read_sql_query(query, conn, params=(output_date, window))
+        df["date"] = output_date
+        
+        # tickers가 제공된 경우 필터링 및 누락 종목 보충
+        if tickers is not None:
+            ticker_list = tickers["stock_code"].astype(str).str.zfill(6).tolist()
+            df = df[df["stock_code"].isin(ticker_list)]
+            existing_codes = set(df["stock_code"])
+            missing_rows = []
+            for code in ticker_list:
+                if code not in existing_codes:
+                    missing_rows.append({"stock_code": code, "date": output_date, "avg_trading_value_20d": None})
+            if missing_rows:
+                df = pd.concat([df, pd.DataFrame(missing_rows)], ignore_index=True)
+        
+        log.info("avg trading value calculation from DB complete", total=len(df))
+        return df
+
+    # ── [기존] DB가 없는 경우 KRX API 호출 (느림) ──
     ticker_df = tickers if tickers is not None else fetch_ticker_list(query_date_str)
     codes = ticker_df["stock_code"].astype(str).str.zfill(6).tolist()
 
