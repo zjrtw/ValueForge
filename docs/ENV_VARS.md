@@ -101,6 +101,8 @@ R2_BUCKET_NAME=valueforge
 
 ```bash
 AI_API_KEY=AIza...
+AI_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai
+AI_MODEL=gemini-2.5-flash
 ```
 
 ---
@@ -227,6 +229,8 @@ PRESERVE_DB=true        # 운영 환경 (DB 유지, DART 캐시 활용)
 | `R2_SECRET_ACCESS_KEY` | ✅ 필수 | ✅ 필수 | ✅ 필수 |
 | `R2_BUCKET_NAME` | 선택 | 선택 | 선택 |
 | `AI_API_KEY` | 선택 | ❌ 불필요 | 선택 |
+| `AI_BASE_URL` | 선택 | ❌ 불필요 | 선택 |
+| `AI_MODEL` | 선택 | ❌ 불필요 | 선택 |
 | `MAX_TICKERS` | 선택 (`0`) | ❌ 불필요 | 권장 (`50`) |
 | `LOG_LEVEL` | 선택 (`INFO`) | ❌ 불필요 | 선택 (`DEBUG`) |
 | `DB_PATH` | 선택 | ❌ 불필요 | 선택 |

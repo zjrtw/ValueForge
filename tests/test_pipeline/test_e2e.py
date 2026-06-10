@@ -18,7 +18,7 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import boto3
 import pandas as pd
@@ -136,6 +136,10 @@ def _run_pipeline_no_upload(db_path: Path) -> dict:
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
         patch("src.pipeline.runner.fetch_company_metadata", return_value=_company_meta()),
+        patch("src.pipeline.runner.fetch_disclosure_dates", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner.fetch_major_shareholders", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner._generate_ai_analyses", return_value=None),
+        patch("src.pipeline.runner._run_stage5", return_value=0),
     ):
         return run_pipeline(_RUN_DATE, db_path=db_path, upload=False)
 
@@ -393,6 +397,10 @@ class E2EWithUploadTest(unittest.TestCase):
             patch("src.pipeline.runner.fetch_daily_price_data", return_value=_prices()),
             patch("src.pipeline.runner.fetch_financial_statements", return_value=_fundamentals()),
             patch("src.pipeline.runner.fetch_company_metadata", return_value=_company_meta()),
+            patch("src.pipeline.runner.fetch_disclosure_dates", return_value=pd.DataFrame()),
+            patch("src.pipeline.runner.fetch_major_shareholders", return_value=pd.DataFrame()),
+            patch("src.pipeline.runner._generate_ai_analyses", return_value=None),
+            patch("src.pipeline.runner._run_stage5", return_value=0),
             patch("src.pipeline.runner.R2Uploader", side_effect=_get_mocked_uploader),
         ):
             return run_pipeline(_RUN_DATE, db_path=self._db_path, upload=True)

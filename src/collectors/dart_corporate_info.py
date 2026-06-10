@@ -1,6 +1,6 @@
 """DART API를 통한 기업 공시 및 지배구조 정보 수집."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -23,6 +23,9 @@ def fetch_disclosure_dates(
     - disclosure_delay_days: 공시 지연 일수 (오늘로부터 며칠 이전인지)
     """
     if client is None:
+        if not settings.DART_API_KEY:
+            log.warning("disclosure date fetch skipped: no DART API key")
+            return pd.DataFrame(columns=["stock_code", "latest_disclosure_date", "disclosure_delay_days"])
         try:
             from opendartreader import OpenDartReader
             client = OpenDartReader(settings.DART_API_KEY)
@@ -105,6 +108,9 @@ def fetch_major_shareholders(
     - institutional_ratio: 기관 보유 비율 (%)
     """
     if client is None:
+        if not settings.DART_API_KEY:
+            log.warning("major shareholder fetch skipped: no DART API key")
+            return pd.DataFrame(columns=["stock_code", "largest_shareholder_ratio", "institutional_ratio"])
         try:
             from opendartreader import OpenDartReader
             client = OpenDartReader(settings.DART_API_KEY)

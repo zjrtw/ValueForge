@@ -24,16 +24,13 @@ class Settings(BaseSettings):
     # AI 분석 (Gemini, OpenAI 등)
     AI_API_KEY: str = ""
     AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai"
-    AI_MODEL: str = "gemini-2.5-flash"
+    AI_MODEL: str = "gemini-3.1-flash-lite"
 
     # Cloudflare R2
     R2_ENDPOINT_URL: str = ""
     R2_ACCESS_KEY_ID: str = ""
     R2_SECRET_ACCESS_KEY: str = ""
     R2_BUCKET_NAME: str = "valueforge"
-
-    # Google Gemini API (V2 AI 정성 분석 — 미설정 시 Stage 5 자동 건너뜀)
-    AI_API_KEY: str = ""
 
     # 파이프라인 설정
     MAX_TICKERS: int = Field(default=0, ge=0)
@@ -58,4 +55,3 @@ class ScreeningParams:
 
 settings = Settings()
 screening_params = ScreeningParams()
-

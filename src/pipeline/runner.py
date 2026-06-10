@@ -14,6 +14,7 @@ import tempfile
 from contextlib import suppress
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -168,7 +169,9 @@ def _collect(
     company_meta = fetch_company_metadata(tickers)
     if not company_meta.empty:
         # tickers에 sector, industry, stock_name_en 정보 병합
-        meta_cols = company_meta[["stock_code", "sector", "industry", "stock_name_en"]].copy()
+        meta_cols = company_meta.reindex(
+            columns=["stock_code", "sector", "industry", "stock_name_en"]
+        ).copy()
         tickers = tickers.merge(meta_cols, on="stock_code", how="left", suffixes=("", "_meta"))
         # 새로 수집한 값이 있으면 사용, 없으면 기존 값 유지
         if "sector_meta" in tickers.columns:
@@ -384,13 +387,13 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
     """Stage 3 함정 감지용 다년도 컬럼(yr1/yr2/yr3)을 추가한다."""
     fundamental_columns = {row[1] for row in conn.execute("PRAGMA table_info(fundamentals)")}
     dps_expr = "dps" if "dps" in fundamental_columns else "NULL AS dps"
-    query = """
+    query = f"""
         SELECT stock_code, fiscal_year,
                operating_profit, free_cash_flow, operating_margin, {dps_expr}
         FROM fundamentals
         WHERE fiscal_quarter = 0
         ORDER BY stock_code, fiscal_year DESC
-    """.format(dps_expr=dps_expr)
+    """
     hist = pd.read_sql_query(query, conn)
     if hist.empty:
         return df
@@ -574,7 +577,8 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Co
 
     # 점수 추세 & 신뢰도 계산 (20일간의 변화율과 변동성)
     if "stock_code" in df.columns:
-        score_trends = _calculate_score_trends(df["stock_code"].unique(), conn)
+        stock_codes = [str(code) for code in df["stock_code"].dropna().unique()]
+        score_trends = _calculate_score_trends(stock_codes, conn)
         df = df.merge(score_trends, on="stock_code", how="left")
 
     # stocks 테이블에서 stock_name, market, sector를 보충
@@ -613,7 +617,7 @@ def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) ->
     from src.db.repository import Repository
     repo = Repository(conn)
 
-    result_rows = []
+    result_rows: list[dict[str, object]] = []
     for code in stock_codes:
         try:
             history = repo.get_score_history(code, days=20)
@@ -628,7 +632,7 @@ def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) ->
             # 최근 점수(가장 최근이 인덱스 0)와 20일 전 점수
             latest_score = history.iloc[0]["composite_score"]
             oldest_score = history.iloc[-1]["composite_score"]
-            scores = history["composite_score"].values
+            scores = pd.to_numeric(history["composite_score"], errors="coerce").dropna()
 
             # 20일 변화율 (%)
             score_change = (latest_score - oldest_score) / oldest_score * 100 if oldest_score != 0 else None
@@ -651,6 +655,14 @@ def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) ->
     return pd.DataFrame(result_rows)
 
 
+def _as_float_score(value: Any) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if pd.isna(score) else score
+
+
 def _generate_ai_analyses(
     repo: Repository,
     ranked: pd.DataFrame,
@@ -662,6 +674,9 @@ def _generate_ai_analyses(
     1초 이상의 간격을 두고 요청합니다.
     """
     import time
+
+    if ranked.empty or not settings.AI_API_KEY:
+        return
 
     if ranked.empty:
         return
@@ -680,12 +695,12 @@ def _generate_ai_analyses(
 
             # 점수 정보
             scores = {
-                "composite_score": row.get("composite_score"),
-                "value_score": row.get("value_score"),
-                "quality_score": row.get("quality_score"),
-                "safety_score": row.get("safety_score"),
-                "growth_score": row.get("growth_score"),
-                "momentum_score": row.get("momentum_score"),
+                "composite_score": _as_float_score(row.get("composite_score")),
+                "value_score": _as_float_score(row.get("value_score")),
+                "quality_score": _as_float_score(row.get("quality_score")),
+                "safety_score": _as_float_score(row.get("safety_score")),
+                "growth_score": _as_float_score(row.get("growth_score")),
+                "momentum_score": _as_float_score(row.get("momentum_score")),
             }
 
             # 위험 플래그

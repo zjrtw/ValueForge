@@ -46,6 +46,10 @@ def stage5_ai_analysis(
         log.info("stage5_skipped", reason="AI_API_KEY not set")
         return 0
 
+    if ranked_df.empty or "stock_name" not in ranked_df.columns:
+        log.info("stage5_skipped", reason="no ranked stocks")
+        return 0
+
     top_n = int(p.get("top_n", 30))
     # '홀딩스'가 포함된 종목 제외 필터링 추가
     analysis_candidates = ranked_df[~ranked_df["stock_name"].str.contains("홀딩스", na=False)]

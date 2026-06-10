@@ -34,6 +34,11 @@ PRICE_COLUMN_DEFINITIONS = {
     "trading_value": "REAL",
 }
 
+RANKING_COLUMN_DEFINITIONS = {
+    "score_change_20d": "REAL",
+    "score_volatility": "REAL",
+}
+
 PRAGMA_SQL = """
 PRAGMA foreign_keys = ON;
 PRAGMA cache_size = -64000;
@@ -328,6 +333,7 @@ def _apply_migration(conn: sqlite3.Connection, migration_sql: str) -> None:
 def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
     _ensure_columns(conn, "stocks", STOCK_COLUMN_DEFINITIONS)
     _ensure_columns(conn, "prices", PRICE_COLUMN_DEFINITIONS)
+    _ensure_columns(conn, "rankings", RANKING_COLUMN_DEFINITIONS)
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS ai_analysis (

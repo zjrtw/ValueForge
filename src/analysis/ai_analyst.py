@@ -2,8 +2,6 @@
 
 from typing import Any
 
-import pandas as pd
-
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -99,6 +97,8 @@ def generate_investment_analysis(
             else:
                 log.warning("gemini_analysis_failed", stock_code=stock_code, error=error_msg)
                 return _generate_fallback_analysis(stock_name, scores, risk_flags)
+
+    return _generate_fallback_analysis(stock_name, scores, risk_flags)
 
 
 def _build_analysis_prompt(
