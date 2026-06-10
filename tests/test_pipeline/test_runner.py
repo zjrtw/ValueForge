@@ -88,6 +88,11 @@ def _patch_collectors():
         patch("src.pipeline.runner.fetch_daily_price_data", return_value=_PRICES),
         patch("src.pipeline.runner.fetch_financial_statements", return_value=_FUNDAMENTALS),
         patch("src.pipeline.runner.fetch_company_metadata", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner.fetch_disclosure_dates", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner.fetch_major_shareholders", return_value=pd.DataFrame()),
+        patch("src.pipeline.runner.generate_investment_analysis", return_value="analysis"),
+        patch("src.pipeline.runner.summarize_disclosure_news", return_value="summary"),
+        patch("src.pipeline.runner.stage5_ai_analysis", return_value=0),
         patch("src.pipeline.runner.calculate_market_ratios", return_value=pd.DataFrame()),
         patch("src.pipeline.runner.R2Uploader"),
     ]

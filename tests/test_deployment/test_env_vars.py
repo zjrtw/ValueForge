@@ -28,6 +28,8 @@ _REQUIRED_VARS = {
     "DART_MAX_WORKERS",
     "PRESERVE_DB",
     "AI_API_KEY",
+    "AI_BASE_URL",
+    "AI_MODEL",
 }
 
 # 실제 값이 없어야 하는 민감 변수

@@ -292,6 +292,8 @@ def compute_composite_score(df: pd.DataFrame) -> pd.Series:
 
 ### 플래그 정의
 
+총 11가지 위험 신호를 자동 감지하며, CRITICAL 1개 이상 또는 HIGH 2개 이상일 때 자동 실격합니다.
+
 ```python
 # src/screening/stage3_trap_detector.py
 
@@ -328,12 +330,12 @@ VALUE_TRAP_FLAGS = {
         'severity': 'HIGH'
     },
     'REVENUE_COLLAPSE': {
-        'condition': lambda f: f['revenue_growth_yoy'] < -20,
-        'description': '매출 YoY 20% 이상 감소',
+        'condition': lambda f: f['revenue_growth_yoy'] < -30,
+        'description': '매출 YoY 30% 이상 감소',
         'severity': 'HIGH'
     },
 
-    # MEDIUM — 경고 (자동 실격 아님)
+    # MEDIUM — 경고 (자동 실격 아님, 하지만 중요함)
     'DECLINING_MARGINS': {
         'condition': lambda f: (
             (f['op_margin_yr1'] < f['op_margin_yr2']) &
@@ -352,6 +354,31 @@ VALUE_TRAP_FLAGS = {
         'description': 'EBITDA 이자보상배율 1.5배 미만 (채무상환 리스크)',
         'severity': 'MEDIUM'
     },
+    'LOW_FCF_QUALITY': {
+        'condition': lambda f: (f['free_cash_flow'] / f['net_profit']) < 0.3,
+        'description': '현금흐름 품질 저하: FCF/순이익 < 0.3 (이익이 현금으로 전환 안 됨)',
+        'severity': 'MEDIUM'
+    },
+    'HIGH_PEG_RATIO': {
+        'condition': lambda f: (f['per'] / (f['revenue_growth_yoy'] * 100)) > 2.0,
+        'description': 'PEG 비율 > 2.0 (성장성 대비 고평가)',
+        'severity': 'MEDIUM'
+    },
+    'DIVIDEND_CUT': {
+        'condition': lambda f: (f['dps'] < f['dps_yr1']) & (f['dps_yr1'] < f['dps_yr2']),
+        'description': '2년 연속 배당금 감소',
+        'severity': 'MEDIUM'
+    },
+    'DISCLOSURE_DELAY': {
+        'condition': lambda f: f['disclosure_delay_days'] > 60,
+        'description': '공시 지연: 최근 공시가 60일 이상 이전 (데이터 신선도 문제)',
+        'severity': 'MEDIUM'
+    },
+    'HIGH_MAJOR_SHAREHOLDER': {
+        'condition': lambda f: f['largest_shareholder_ratio'] > 50,
+        'description': '최대 주주 지분율 50% 이상 (지배 구조 리스크)',
+        'severity': 'MEDIUM'
+    },
 
     # LOW — 정보성
     'HOLDING_COMPANY': {
@@ -362,6 +389,11 @@ VALUE_TRAP_FLAGS = {
     'HIGH_CAPEX': {
         'condition': lambda f: (f['capex'] / f['revenue']) > 0.15,
         'description': 'CAPEX가 매출의 15% 초과 (자본집약적)',
+        'severity': 'LOW'
+    },
+    'LOW_INSTITUTIONAL_OWNERSHIP': {
+        'condition': lambda f: f['institutional_ratio'] < 10,
+        'description': '기관 보유율 10% 미만 (유동성 & 신뢰도 저하)',
         'severity': 'LOW'
     },
 }

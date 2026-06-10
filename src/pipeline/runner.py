@@ -14,14 +14,19 @@ import tempfile
 from contextlib import suppress
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
+from src.analysis.ai_analyst import generate_investment_analysis
+from src.collectors.dart_corporate_info import fetch_disclosure_dates, fetch_major_shareholders
 from src.collectors.dart_financials import fetch_company_metadata, fetch_financial_statements
+from src.collectors.dart_news import summarize_disclosure_news
 from src.collectors.krx_prices import fetch_daily_price_data
 from src.collectors.krx_tickers import fetch_ticker_list
 from src.collectors.market_ratios import calculate_market_ratios
 from src.db.repository import Repository
+from src.db.schema import migrate_schema
 from src.scoring.growth_scorer import add_yoy_growth_columns
 from src.screening.stage1_filter import stage1_filter
 from src.screening.stage2_scorer import stage2_score
@@ -63,6 +68,7 @@ def run_pipeline(
     _db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(_db_path))
+    migrate_schema(conn)  # [안정성] 실행 전 최신 스키마(v3 등) 적용
     repo = Repository(conn)
     stats: dict = {}
 
@@ -91,7 +97,7 @@ def run_pipeline(
         # ── Phase 3: 결과 저장 ─────────────────────────────────────────────
         _write_results(repo, run_date, stage3_all, ranked)
 
-        # ── Phase 3-5: Stage 5 AI 정성 분석 (GEMINI_API_KEY 설정 시 실행) ──
+        # ── Phase 3-5: Stage 5 AI 정성 분석 (AI_API_KEY 설정 시 실행) ──
         ai_insights_count = _run_stage5(conn, ranked, run_date.isoformat())
         stats["ai_insights_count"] = ai_insights_count
 
@@ -147,7 +153,7 @@ def _collect(
     repo: Repository,
     run_date: date,
 ) -> tuple[pd.DataFrame, int, int]:
-    """수집 단계: tickers → prices → fundamentals."""
+    """수집 단계: tickers → stocks(FK) → prices → fundamentals."""
     # 1. 종목 코드 (listing_date, shares_outstanding 포함)
     log.info("collect_tickers_start")
     tickers = fetch_ticker_list(run_date.isoformat())
@@ -158,6 +164,56 @@ def _collect(
         
     log.info("collect_tickers_done", count=len(tickers))
 
+    # 4. DART에서 회사 정보 및 업종 정보 수집 (먼저 수집해서 stocks에 저장)
+    log.info("collect_company_metadata_start")
+    company_meta = fetch_company_metadata(tickers)
+    if not company_meta.empty:
+        # tickers에 sector, industry, stock_name_en 정보 병합
+        meta_cols = company_meta.reindex(
+            columns=["stock_code", "sector", "industry", "stock_name_en"]
+        ).copy()
+        tickers = tickers.merge(meta_cols, on="stock_code", how="left", suffixes=("", "_meta"))
+        # 새로 수집한 값이 있으면 사용, 없으면 기존 값 유지
+        if "sector_meta" in tickers.columns:
+            tickers["sector"] = tickers["sector_meta"].fillna(tickers["sector"])
+            tickers = tickers.drop(columns=["sector_meta"])
+        if "industry" in tickers.columns and "industry_meta" not in tickers.columns:
+            # industry가 이미 있으면 업데이트하지 않음
+            pass
+        elif "industry_meta" in tickers.columns:
+            tickers["industry"] = tickers["industry_meta"].fillna(tickers.get("industry"))
+            tickers = tickers.drop(columns=["industry_meta"])
+        if "stock_name_en_meta" in tickers.columns:
+            tickers["stock_name_en"] = tickers["stock_name_en_meta"].fillna(tickers.get("stock_name_en"))
+            tickers = tickers.drop(columns=["stock_name_en_meta"])
+        log.info("collect_company_metadata_done", count=len(company_meta), sector_updated=(tickers["sector"] != "Unknown").sum())
+    else:
+        log.warning("collect_company_metadata_empty")
+
+    # 5. 공시 정보 수집 (공시 지연 감지용)
+    log.info("collect_disclosure_dates_start")
+    disclosure_info = fetch_disclosure_dates(tickers)
+    if not disclosure_info.empty:
+        disc_cols = disclosure_info[["stock_code", "latest_disclosure_date", "disclosure_delay_days"]].copy()
+        tickers = tickers.merge(disc_cols, on="stock_code", how="left")
+        log.info("collect_disclosure_dates_done", count=len(disclosure_info))
+    else:
+        log.warning("collect_disclosure_dates_empty")
+
+    # 6. 주요주주 정보 수집 (지배 구조 리스크 감지용)
+    log.info("collect_major_shareholders_start")
+    shareholder_info = fetch_major_shareholders(tickers)
+    if not shareholder_info.empty:
+        sh_cols = shareholder_info[["stock_code", "largest_shareholder_ratio", "institutional_ratio"]].copy()
+        tickers = tickers.merge(sh_cols, on="stock_code", how="left")
+        log.info("collect_major_shareholders_done", count=len(shareholder_info))
+    else:
+        log.warning("collect_major_shareholders_empty")
+
+    # stocks 테이블에 먼저 저장 (prices에서 FK 제약 필요)
+    repo.upsert_stocks(tickers)
+
+    # 2. 일별 주가 (stocks FK 제약이 있으므로 이후에)
     # 1-1. stocks 선삽입 — prices FK 제약 충족을 위해 기본 정보로 먼저 저장
     repo.upsert_stocks(tickers)
 
@@ -177,8 +233,9 @@ def _collect(
     log.info("collect_fundamentals_start")
     fundamentals = fetch_financial_statements(tickers, conn=repo.conn)
     if not fundamentals.empty:
-        # bps가 없으면 자체 계산 (total_equity / shares_outstanding)
+        # bps/eps가 없으면 자체 계산
         fundamentals = _calculate_missing_bps(fundamentals, tickers)
+        fundamentals = _calculate_missing_eps(fundamentals, tickers)
         repo.upsert_fundamentals(fundamentals)
         log.info("collect_fundamentals_done", count=len(fundamentals))
     else:
@@ -292,6 +349,11 @@ def _write_results(
     repo.upsert_rankings(rankings_df)
     log.info("rankings_written", count=len(rankings_df))
 
+    # AI 분석 생성 (상위 20개만)
+    log.info("ai_analysis_start")
+    _generate_ai_analyses(repo, ranked.head(20), run_date_str)
+    log.info("ai_analysis_done")
+
 
 def _upload(
     run_date: date,
@@ -323,9 +385,11 @@ def _upload(
 
 def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFrame:
     """Stage 3 함정 감지용 다년도 컬럼(yr1/yr2/yr3)을 추가한다."""
-    query = """
+    fundamental_columns = {row[1] for row in conn.execute("PRAGMA table_info(fundamentals)")}
+    dps_expr = "dps" if "dps" in fundamental_columns else "NULL AS dps"
+    query = f"""
         SELECT stock_code, fiscal_year,
-               operating_profit, free_cash_flow, operating_margin
+               operating_profit, free_cash_flow, operating_margin, {dps_expr}
         FROM fundamentals
         WHERE fiscal_quarter = 0
         ORDER BY stock_code, fiscal_year DESC
@@ -346,6 +410,7 @@ def _enrich_multiyear(df: pd.DataFrame, conn: sqlite3.Connection) -> pd.DataFram
         ("operating_profit", "op_profit"),
         ("free_cash_flow", "fcf"),
         ("operating_margin", "op_margin"),
+        ("dps", "dps"),
     ]:
         pivot = hist.pivot_table(
             index="stock_code", columns="yr_rank", values=col, aggfunc="first"
@@ -385,6 +450,32 @@ def _calculate_momentum_returns(
     # 모멘텀 수익률 계산
     momentum_df = latest_momentum_returns(prices_df)
     return momentum_df[["stock_code", "return_6m", "return_3m", "return_1m"]]
+
+
+def _calculate_missing_eps(
+    fundamentals: pd.DataFrame,
+    tickers: pd.DataFrame,
+) -> pd.DataFrame:
+    """eps(주당순이익)가 없으면 net_profit / shares_outstanding으로 계산한다."""
+    result = fundamentals.copy()
+    if "eps" not in result.columns or "net_profit" not in result.columns:
+        return result
+
+    missing_eps = result["eps"].isna() & result["net_profit"].notna()
+    if not missing_eps.any():
+        return result
+
+    ticker_shares = tickers[["stock_code", "shares_outstanding"]].copy()
+    result = result.merge(ticker_shares, on="stock_code", how="left")
+
+    result.loc[missing_eps, "eps"] = (
+        result.loc[missing_eps, "net_profit"] / result.loc[missing_eps, "shares_outstanding"]
+    )
+
+    result = result.drop(columns=["shares_outstanding"], errors="ignore")
+
+    log.info("eps_calculated", calculated=int(missing_eps.sum()))
+    return result
 
 
 def _calculate_missing_bps(
@@ -484,6 +575,12 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Co
     ).astype(int)
     df["highest_severity"] = [_highest_severity(row) for _, row in df.iterrows()]
 
+    # 점수 추세 & 신뢰도 계산 (20일간의 변화율과 변동성)
+    if "stock_code" in df.columns:
+        stock_codes = [str(code) for code in df["stock_code"].dropna().unique()]
+        score_trends = _calculate_score_trends(stock_codes, conn)
+        df = df.merge(score_trends, on="stock_code", how="left")
+
     # stocks 테이블에서 stock_name, market, sector를 보충
     # (stage 거치면서 손실될 수 있으므로 명시적으로 재추가)
     if "stock_code" in df.columns:
@@ -507,6 +604,152 @@ def _build_rankings_df(ranked: pd.DataFrame, run_date_str: str, conn: sqlite3.Co
                 df = df.drop(columns=[f"{col}_from_stocks"])
 
     return df
+
+
+def _calculate_score_trends(stock_codes: list[str], conn: sqlite3.Connection) -> pd.DataFrame:
+    """최근 20일간 점수 추세를 계산한다.
+
+    반환: stock_code, score_change_20d, score_volatility
+    """
+    if len(stock_codes) == 0:
+        return pd.DataFrame(columns=["stock_code", "score_change_20d", "score_volatility"])
+
+    from src.db.repository import Repository
+    repo = Repository(conn)
+
+    result_rows: list[dict[str, object]] = []
+    for code in stock_codes:
+        try:
+            history = repo.get_score_history(code, days=20)
+            if len(history) < 2:
+                result_rows.append({
+                    "stock_code": code,
+                    "score_change_20d": None,
+                    "score_volatility": None,
+                })
+                continue
+
+            # 최근 점수(가장 최근이 인덱스 0)와 20일 전 점수
+            latest_score = history.iloc[0]["composite_score"]
+            oldest_score = history.iloc[-1]["composite_score"]
+            scores = pd.to_numeric(history["composite_score"], errors="coerce").dropna()
+
+            # 20일 변화율 (%)
+            score_change = (latest_score - oldest_score) / oldest_score * 100 if oldest_score != 0 else None
+            # 변동성 (표준편차)
+            score_volatility = scores.std() if len(scores) > 1 else None
+
+            result_rows.append({
+                "stock_code": code,
+                "score_change_20d": score_change,
+                "score_volatility": score_volatility,
+            })
+        except Exception as e:
+            log.warning("score_trend_calculation_failed", stock_code=code, error=str(e))
+            result_rows.append({
+                "stock_code": code,
+                "score_change_20d": None,
+                "score_volatility": None,
+            })
+
+    return pd.DataFrame(result_rows)
+
+
+def _as_float_score(value: Any) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return 0.0 if pd.isna(score) else score
+
+
+def _generate_ai_analyses(
+    repo: Repository,
+    ranked: pd.DataFrame,
+    run_date_str: str,
+) -> None:
+    """상위 랭킹 종목들의 AI 분석을 생성한다.
+
+    Rate Limit 대응: Gemini API는 분당 60개 요청 제한이므로,
+    1초 이상의 간격을 두고 요청합니다.
+    """
+    import time
+
+    if ranked.empty or not settings.AI_API_KEY:
+        return
+
+    if ranked.empty:
+        return
+
+    for idx, (_, row) in enumerate(ranked.iterrows()):
+        try:
+            # Gemini API Rate Limit 대응: 분당 60개 제한
+            # 20개 종목 기준 최소 20초 소요
+            if idx > 0:
+                time.sleep(1.5)  # 요청 간 1.5초 delay
+            stock_code = str(row.get("stock_code", "")).zfill(6)
+            stock_name = row.get("stock_name", "")
+
+            if not stock_code:
+                continue
+
+            # 점수 정보
+            scores = {
+                "composite_score": _as_float_score(row.get("composite_score")),
+                "value_score": _as_float_score(row.get("value_score")),
+                "quality_score": _as_float_score(row.get("quality_score")),
+                "safety_score": _as_float_score(row.get("safety_score")),
+                "growth_score": _as_float_score(row.get("growth_score")),
+                "momentum_score": _as_float_score(row.get("momentum_score")),
+            }
+
+            # 위험 플래그
+            risk_flags = (
+                str(row.get("risk_flags", "")).split(",")
+                if row.get("risk_flags")
+                else []
+            )
+
+            # 재무 정보
+            fundamentals = {
+                "per": row.get("per"),
+                "pbr": row.get("pbr"),
+                "roe": row.get("roe"),
+                "debt_ratio": None,  # 별도 계산 필요
+                "dividend_yield": row.get("dividend_yield"),
+                "market_cap_b": row.get("market_cap_b"),
+            }
+
+            # 시장 정보
+            market_info = {
+                "market": row.get("market"),
+                "sector": row.get("sector"),
+                "market_cap_b": row.get("market_cap_b"),
+            }
+
+            # 최근 공시 요약
+            disclosure_summary = summarize_disclosure_news(stock_code, stock_name, days=30)
+
+            # AI 분석 생성
+            analysis = generate_investment_analysis(
+                stock_code,
+                stock_name,
+                scores,
+                risk_flags,
+                fundamentals,
+                market_info,
+                disclosure_summary,
+            )
+
+            # 분석 결과 저장
+            repo.upsert_ai_analysis(stock_code, run_date_str, analysis)
+
+        except Exception as exc:
+            log.warning(
+                "ai_analysis_generation_failed",
+                stock_code=stock_code,
+                error=str(exc),
+            )
 
 
 def _highest_severity(row: pd.Series) -> str | None:

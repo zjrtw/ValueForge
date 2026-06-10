@@ -20,10 +20,10 @@ _STATEMENT_DIVISIONS = {"IS", "BS", "CIS", "CF"}
 _quota_tracker = DailyQuotaTracker(daily_limit=10000)
 
 _ACCOUNT_MAP = {
-    "revenue": ("매출액", "수익(매출액)", "영업수익"),
-    "gross_profit": ("매출총이익",),
-    "operating_profit": ("영업이익",),
-    "net_profit": ("당기순이익", "당기순이익(손실)"),
+    "revenue": ("매출액", "수익(매출액)", "영업수익", "매출"),
+    "gross_profit": ("매출총이익", "매출총이익(손실)"),
+    "operating_profit": ("영업이익", "영업이익(손실)"),
+    "net_profit": ("당기순이익", "당기순이익(손실)", "연결당기순이익", "연결당기순이익(손실)"),
     "total_assets": ("자산총계",),
     "current_assets": ("유동자산",),
     "cash_and_equiv": ("현금및현금성자산", "현금 및 현금성자산"),
@@ -31,9 +31,14 @@ _ACCOUNT_MAP = {
     "current_liabilities": ("유동부채",),
     "total_equity": ("자본총계",),
     "operating_cf": ("영업활동현금흐름", "영업활동으로 인한 현금흐름"),
-    "capex": ("유형자산의 취득", "유형자산 취득"),
-    "eps": ("기본주당이익", "기본주당순이익"),
-    "bps": ("주당순자산가치", "1주당 순자산"),
+    "capex": ("유형자산의 취득", "유형자산 취득", "유형자산의취득"),
+    "eps": (
+        "기본주당이익", "기본주당순이익", "주당순이익",
+        "기본주당순이익(손실)", "기본주당이익(손실)",
+        "계속영업기본주당이익", "계속영업기본주당이익(손실)",
+        "계속영업 기본주당순손익", "주당이익"
+    ),
+    "bps": ("주당순자산가치", "1주당 순자산", "주당순자산", "1주당순자산"),
     "dps": ("주당배당금", "현금배당금(보통주)"),
 }
 
@@ -172,11 +177,10 @@ def fetch_company_metadata(
 ) -> pd.DataFrame:
     """DART company API에서 종목별 메타데이터를 수집한다.
 
-    반환 컬럼: stock_code, stock_name_en, industry
+    반환 컬럼: stock_code, stock_name_en, industry, sector
 
-    - industry: DART induty_code (표준산업분류코드, 예: '264').
-      KRX 섹터명과 다르며 추후 마이그레이션 시 별도 매핑 테이블로 변환 예정.
-    - listing_date: DART company API에 포함되지 않아 수집 불가.
+    - industry: DART induty_code를 표준산업분류명으로 매핑 (예: '264' → '반도체 및 전자부품 제조업')
+    - sector: KRX의 SECT_TP_NM을 보완하는 매핑값
     """
     dart = client if client is not None else _create_dart_client()
     ticker_df = tickers if tickers is not None else fetch_ticker_list()
@@ -201,18 +205,19 @@ def fetch_company_metadata(
             corp_name_eng = info.get("corp_name_eng")
 
             # 업종 코드를 업종명으로 변환
-            sector = get_industry_name(induty_code) if induty_code else "Unknown"
+            industry = get_industry_name(induty_code) if induty_code else "Unknown"
 
             rows.append({
                 "stock_code": code,
                 "stock_name_en": corp_name_eng or None,
-                "sector": sector,
+                "industry": industry,
+                "sector": industry,  # sector와 industry를 동일하게 설정 (DART 기반)
             })
         except Exception as exc:
             log.warning("dart company info fetch failed", stock_code=code, error=str(exc))
 
     log.info("dart company metadata collection complete", total=len(rows))
-    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "sector"]) if rows else pd.DataFrame(columns=["stock_code", "stock_name_en", "sector"])
+    return pd.DataFrame(rows, columns=["stock_code", "stock_name_en", "industry", "sector"]) if rows else pd.DataFrame(columns=["stock_code", "stock_name_en", "industry", "sector"])
 
 
 def _create_dart_client() -> Any:

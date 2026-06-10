@@ -1,6 +1,6 @@
 import sqlite3
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MIGRATIONS: dict[int, str] = {
     2: """
 CREATE TABLE IF NOT EXISTS ai_insights (
@@ -20,6 +20,23 @@ CREATE INDEX IF NOT EXISTS idx_ai_insights_run_date
     3: """
 ALTER TABLE prices ADD COLUMN trading_value REAL;
 """,
+    4: "",
+}
+
+STOCK_COLUMN_DEFINITIONS = {
+    "latest_disclosure_date": "DATE",
+    "disclosure_delay_days": "INTEGER",
+    "largest_shareholder_ratio": "REAL",
+    "institutional_ratio": "REAL",
+}
+
+PRICE_COLUMN_DEFINITIONS = {
+    "trading_value": "REAL",
+}
+
+RANKING_COLUMN_DEFINITIONS = {
+    "score_change_20d": "REAL",
+    "score_volatility": "REAL",
 }
 
 PRAGMA_SQL = """
@@ -29,18 +46,22 @@ PRAGMA cache_size = -64000;
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS stocks (
-    stock_code          TEXT PRIMARY KEY,
-    stock_name          TEXT NOT NULL,
-    stock_name_en       TEXT,
-    market              TEXT NOT NULL
-                        CHECK (market IN ('KOSPI', 'KOSDAQ')),
-    sector              TEXT,
-    industry            TEXT,
-    listing_date        DATE,
-    shares_outstanding  INTEGER,
-    is_active           INTEGER NOT NULL DEFAULT 1,
-    created_at          TEXT DEFAULT (datetime('now')),
-    updated_at          TEXT DEFAULT (datetime('now'))
+    stock_code              TEXT PRIMARY KEY,
+    stock_name              TEXT NOT NULL,
+    stock_name_en           TEXT,
+    market                  TEXT NOT NULL
+                            CHECK (market IN ('KOSPI', 'KOSDAQ')),
+    sector                  TEXT,
+    industry                TEXT,
+    listing_date            DATE,
+    shares_outstanding      INTEGER,
+    latest_disclosure_date  DATE,
+    disclosure_delay_days   INTEGER,
+    largest_shareholder_ratio  REAL,
+    institutional_ratio     REAL,
+    is_active               INTEGER NOT NULL DEFAULT 1,
+    created_at              TEXT DEFAULT (datetime('now')),
+    updated_at              TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS prices (
@@ -151,8 +172,21 @@ CREATE TABLE IF NOT EXISTS rankings (
     debt_to_equity      REAL,
     risk_flag_count     INTEGER DEFAULT 0,
     highest_severity    TEXT,
+    score_change_20d    REAL,
+    score_volatility    REAL,
     FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
     UNIQUE (run_date, stock_code)
+);
+
+CREATE TABLE IF NOT EXISTS ai_analysis (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    stock_code          TEXT NOT NULL,
+    run_date            TEXT NOT NULL,
+    analysis_text       TEXT NOT NULL,
+    analysis_type       TEXT DEFAULT 'comprehensive',
+    generated_at        TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
+    UNIQUE (stock_code, run_date)
 );
 
 CREATE TABLE IF NOT EXISTS ai_insights (
@@ -229,6 +263,7 @@ def initialize_schema(conn: sqlite3.Connection) -> None:
     """SQLite 연결에 ValueForge v1 스키마와 인덱스를 적용한다."""
     conn.executescript(PRAGMA_SQL)
     conn.executescript(SCHEMA_SQL)
+    _ensure_schema_compatibility(conn)
     conn.executescript(INDEX_SQL)
     _ensure_migration_table(conn)
     _record_schema_version(conn, SCHEMA_VERSION)
@@ -257,11 +292,12 @@ def migrate_schema(conn: sqlite3.Connection, target_version: int = SCHEMA_VERSIO
         if migration_sql is None:
             raise RuntimeError(f"missing migration for schema version {next_version}")
 
-        conn.executescript(migration_sql)
+        _apply_migration(conn, migration_sql)
         _record_schema_version(conn, next_version)
         _set_user_version(conn, next_version)
         current_version = next_version
 
+    _ensure_schema_compatibility(conn)
     conn.commit()
 
 
@@ -282,3 +318,44 @@ def _record_schema_version(conn: sqlite3.Connection, version: int) -> None:
 
 def _set_user_version(conn: sqlite3.Connection, version: int) -> None:
     conn.execute(f"PRAGMA user_version = {int(version)}")
+
+
+def _apply_migration(conn: sqlite3.Connection, migration_sql: str) -> None:
+    if not migration_sql.strip():
+        return
+    if "ALTER TABLE prices ADD COLUMN trading_value" in migration_sql:
+        _ensure_columns(conn, "prices", PRICE_COLUMN_DEFINITIONS)
+        return
+
+    conn.executescript(migration_sql)
+
+
+def _ensure_schema_compatibility(conn: sqlite3.Connection) -> None:
+    _ensure_columns(conn, "stocks", STOCK_COLUMN_DEFINITIONS)
+    _ensure_columns(conn, "prices", PRICE_COLUMN_DEFINITIONS)
+    _ensure_columns(conn, "rankings", RANKING_COLUMN_DEFINITIONS)
+    conn.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS ai_analysis (
+            id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+            stock_code          TEXT NOT NULL,
+            run_date            TEXT NOT NULL,
+            analysis_text       TEXT NOT NULL,
+            analysis_type       TEXT DEFAULT 'comprehensive',
+            generated_at        TEXT DEFAULT (datetime('now')),
+            FOREIGN KEY (stock_code) REFERENCES stocks(stock_code),
+            UNIQUE (stock_code, run_date)
+        );
+        """
+    )
+
+
+def _ensure_columns(
+    conn: sqlite3.Connection,
+    table: str,
+    column_definitions: dict[str, str],
+) -> None:
+    existing_columns = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    for column, definition in column_definitions.items():
+        if column not in existing_columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")

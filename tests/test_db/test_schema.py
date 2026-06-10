@@ -29,6 +29,7 @@ class SchemaTest(unittest.TestCase):
                 "scores",
                 "risk_flags",
                 "rankings",
+                "ai_analysis",
                 "ai_insights",
                 "pipeline_runs",
                 "schema_migrations",
@@ -63,8 +64,8 @@ class SchemaTest(unittest.TestCase):
         user_version = self.conn.execute("PRAGMA user_version").fetchone()[0]
 
         self.assertEqual(foreign_keys, 1)
-        self.assertEqual(user_version, 3)
-        self.assertEqual(get_schema_version(self.conn), 3)
+        self.assertEqual(user_version, 4)
+        self.assertEqual(get_schema_version(self.conn), 4)
 
     def test_rejects_invalid_market_and_status_values(self) -> None:
         with self.assertRaises(sqlite3.IntegrityError):
@@ -88,14 +89,14 @@ class SchemaTest(unittest.TestCase):
         ]
 
         # initialize_schema는 현재 SCHEMA_VERSION(3)만 기록함
-        self.assertEqual(versions, [3])
+        self.assertEqual(versions, [4])
 
     def test_migrate_schema_initializes_blank_database(self) -> None:
         conn = sqlite3.connect(":memory:")
         try:
             migrate_schema(conn)
 
-            self.assertEqual(get_schema_version(conn), 3)
+            self.assertEqual(get_schema_version(conn), 4)
             table_count = conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'stocks'"
             ).fetchone()[0]
@@ -105,11 +106,11 @@ class SchemaTest(unittest.TestCase):
 
     def test_migrate_schema_applies_forward_migration(self) -> None:
         # 현재 버전이 3이므로, 테스트를 위해 4번 마이그레이션을 동적으로 추가
-        MIGRATIONS[4] = "CREATE TABLE IF NOT EXISTS migration_test (id INTEGER PRIMARY KEY);"
+        MIGRATIONS[5] = "CREATE TABLE IF NOT EXISTS migration_test (id INTEGER PRIMARY KEY);"
         try:
-            migrate_schema(self.conn, target_version=4)
+            migrate_schema(self.conn, target_version=5)
 
-            self.assertEqual(get_schema_version(self.conn), 4)
+            self.assertEqual(get_schema_version(self.conn), 5)
             table_count = self.conn.execute(
                 "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'migration_test'"
             ).fetchone()[0]
@@ -121,13 +122,13 @@ class SchemaTest(unittest.TestCase):
             ]
             self.assertEqual(table_count, 1)
             # 기존 3에 4가 추가됨
-            self.assertEqual(versions, [3, 4])
+            self.assertEqual(versions, [4, 5])
         finally:
-            MIGRATIONS.pop(4, None)
+            MIGRATIONS.pop(5, None)
 
     def test_migrate_schema_rejects_missing_forward_migration(self) -> None:
         with self.assertRaises(RuntimeError):
-            migrate_schema(self.conn, target_version=4)
+            migrate_schema(self.conn, target_version=5)
 
 
 if __name__ == "__main__":

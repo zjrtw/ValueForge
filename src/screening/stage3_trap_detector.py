@@ -36,9 +36,15 @@ FLAG_SPECS: tuple[FlagSpec, ...] = (
     FlagSpec("DECLINING_MARGINS", "3년 연속 영업이익률 하락", Severity.MEDIUM),
     FlagSpec("DECLINING_REVENUE", "매출 YoY 5% 이상 감소", Severity.MEDIUM),
     FlagSpec("LOW_INTEREST_COVERAGE", "이자보상배율 1.5배 미만 (채무상환 리스크)", Severity.MEDIUM),
+    FlagSpec("LOW_FCF_QUALITY", "현금흐름 품질 저하: FCF/순이익 < 0.3 (이익이 현금으로 전환 안 됨)", Severity.MEDIUM),
+    FlagSpec("HIGH_PEG_RATIO", "PEG 비율 > 2.0 (성장성 대비 고평가)", Severity.MEDIUM),
+    FlagSpec("DIVIDEND_CUT", "2년 연속 배당금 감소", Severity.MEDIUM),
+    FlagSpec("DISCLOSURE_DELAY", "공시 지연: 최근 공시가 60일 이상 이전 (데이터 신선도 문제)", Severity.MEDIUM),
+    FlagSpec("HIGH_MAJOR_SHAREHOLDER", "최대 주주 지분율 50% 이상 (지배 구조 리스크)", Severity.MEDIUM),
     # LOW — 정보성
     FlagSpec("HOLDING_COMPANY", "지주회사 (구조적 할인 가능성)", Severity.LOW),
     FlagSpec("HIGH_CAPEX", "CAPEX가 매출의 15% 초과 (자본집약적)", Severity.LOW),
+    FlagSpec("LOW_INSTITUTIONAL_OWNERSHIP", "기관 보유율 10% 미만 (유동성 & 신뢰도 저하)", Severity.LOW),
 )
 
 _BY_NAME: dict[str, FlagSpec] = {s.name: s for s in FLAG_SPECS}
@@ -155,5 +161,43 @@ def _check_flag(df: pd.DataFrame, spec: FlagSpec, params: dict) -> pd.Series:
         capex = _col(df, "capex").abs()
         ratio = capex / revenue.where(revenue > 0)
         return ratio > 0.15
+
+    if name == "LOW_FCF_QUALITY":
+        fcf = _col(df, "free_cash_flow")
+        net_profit = _col(df, "net_profit")
+        # FCF/순이익 비율이 0.3 미만이면 현금 전환율이 낮음 (0.3은 30%)
+        # 순이익이 양수일 때만 계산
+        ratio = fcf / net_profit.where(net_profit > 0)
+        return ratio < 0.3
+
+    if name == "HIGH_PEG_RATIO":
+        per = _col(df, "per")
+        growth = _col(df, "revenue_growth_yoy")
+        # PEG = PER / 성장률(%)
+        # 성장률이 5% 이상일 때만 계산, PEG > 2.0이면 성장 대비 고평가
+        peg = per / (growth * 100).where(growth > 0.05)
+        return peg > 2.0
+
+    if name == "DIVIDEND_CUT":
+        dps = _col(df, "dps")
+        dps_yr1 = _col(df, "dps_yr1")
+        dps_yr2 = _col(df, "dps_yr2")
+        # 2년 연속 배당금 감소
+        return (dps < dps_yr1) & (dps_yr1 < dps_yr2)
+
+    if name == "DISCLOSURE_DELAY":
+        delay_days = _col(df, "disclosure_delay_days")
+        # 공시 지연이 60일 이상이면 데이터 신선도 문제
+        return delay_days > 60
+
+    if name == "HIGH_MAJOR_SHAREHOLDER":
+        ratio = _col(df, "largest_shareholder_ratio")
+        # 최대 주주 지분율이 50% 이상
+        return ratio > 50
+
+    if name == "LOW_INSTITUTIONAL_OWNERSHIP":
+        ratio = _col(df, "institutional_ratio")
+        # 기관 보유율이 10% 미만
+        return ratio < 10
 
     return pd.Series(False, index=df.index)
