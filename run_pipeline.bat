@@ -61,7 +61,25 @@ set "NO_PROXY=data.krx.co.kr,opendart.fss.or.kr,localhost,127.0.0.1"
 
 if "%RUN_TESTS%"=="1" (
     echo.
-    echo [TEST] Running tests...
+    echo [LINT] Running ruff...
+    ruff check src/
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Linting failed. Pipeline execution aborted.
+        exit /b 1
+    )
+
+    echo.
+    echo [TYPE] Running mypy...
+    mypy src/ --ignore-missing-imports
+    if errorlevel 1 (
+        echo.
+        echo [ERROR] Type check failed. Pipeline execution aborted.
+        exit /b 1
+    )
+
+    echo.
+    echo [TEST] Running pytest...
     pytest tests/ -v
     if errorlevel 1 (
         echo.
