@@ -3,8 +3,6 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-import pandas as pd
-
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
