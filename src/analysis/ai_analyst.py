@@ -36,7 +36,8 @@ def generate_investment_analysis(
         return _generate_fallback_analysis(stock_name, scores, risk_flags)
 
     try:
-        import google.generativeai as genai
+        from google import genai
+        from google.genai import types
     except ImportError:
         log.warning("gemini library not installed, using fallback analysis")
         return _generate_fallback_analysis(stock_name, scores, risk_flags)
@@ -48,31 +49,27 @@ def generate_investment_analysis(
     for attempt in range(max_retries):
         try:
             import time
-            genai.configure(api_key=settings.AI_API_KEY)
-            model = genai.GenerativeModel(settings.AI_MODEL)
+            client = genai.Client(api_key=settings.AI_API_KEY)
 
             prompt = _build_analysis_prompt(
                 stock_code, stock_name, scores, risk_flags, fundamentals, market_info, disclosure_summary
             )
 
-            response = model.generate_content(prompt, safety_settings=[
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_NONE",
-                },
-                {
-                    "category": "HARM_CATEGORY_HATE_SPEECH",
-                    "threshold": "BLOCK_NONE",
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    "threshold": "BLOCK_NONE",
-                },
-                {
-                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_NONE",
-                },
-            ])
+            # 새 SDK 설정 형식
+            config = types.GenerateContentConfig(
+                safety_settings=[
+                    types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="BLOCK_NONE"),
+                    types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="BLOCK_NONE"),
+                ]
+            )
+
+            response = client.models.generate_content(
+                model=settings.AI_MODEL,
+                contents=prompt,
+                config=config
+            )
 
             analysis = response.text
             log.info("ai_analysis_generated", stock_code=stock_code, model=settings.AI_MODEL, length=len(analysis))

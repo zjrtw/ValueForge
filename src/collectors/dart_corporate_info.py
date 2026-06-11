@@ -1,6 +1,6 @@
 """DART API를 통한 기업 공시 및 지배구조 정보 수집."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import pandas as pd
@@ -47,29 +47,23 @@ def fetch_disclosure_dates(
 
     for code in codes:
         try:
-            # 최근 공시 정보 조회 (연간 재무제표만)
-            disclosures = client.finstate_all_search(code)
+            # 최근 공시 정보 조회 (최근 1년치 공시 목록)
+            start_date = (datetime.now() - timedelta(days=365)).strftime("%Y%m%d")
+            disclosures = client.list(code, start=start_date, kind="A")  # A: 정기공시
 
             if disclosures is None or disclosures.empty:
                 continue
 
-            # 연간 재무제표 공시만 필터
-            annual_disclosures = disclosures[
-                (disclosures.get("report_nm", "").str.contains("사업보고서|정정공시|반기보고서", na=False, regex=True))
-            ]
-
-            if annual_disclosures.empty:
-                continue
-
             # 가장 최근 공시
-            latest = annual_disclosures.iloc[0]
-            disclosure_date_str = latest.get("dcls_date")
+            latest = disclosures.iloc[0]
+            disclosure_date_str = latest.get("rcept_dt")  # list() 결과는 rcept_dt 사용
 
             if not disclosure_date_str:
                 continue
 
             try:
-                disclosure_date = datetime.strptime(str(disclosure_date_str), "%Y-%m-%d").date()
+                # DART list API의 날짜 형식은 YYYYMMDD
+                disclosure_date = datetime.strptime(str(disclosure_date_str), "%Y%m%d").date()
             except (ValueError, TypeError):
                 continue
 
@@ -137,17 +131,25 @@ def fetch_major_shareholders(
             if shareholders is None or shareholders.empty:
                 continue
 
-            # 최대 주주의 지분율
-            largest_ratio = shareholders.iloc[0].get("ownership") if len(shareholders) > 0 else None
+            # 최대 주주의 지분율 (stkrt: 지분율)
+            largest_ratio = shareholders.iloc[0].get("stkrt") if len(shareholders) > 0 else None
 
-            # 기관투자자 비율 계산 (기관 항목들의 합)
-            institutional = shareholders[shareholders.get("name", "").str.contains("기관|펀드|보험", na=False, regex=True)]
-            institutional_ratio = institutional.get("ownership").sum() if not institutional.empty else None
+            # 기관투자자 비율 계산 (repror: 보고자 명칭)
+            institutional_ratio = None
+            name_col = "repror" if "repror" in shareholders.columns else ("nm" if "nm" in shareholders.columns else "name")
+            
+            if name_col in shareholders.columns:
+                mask = shareholders[name_col].astype(str).str.contains("기관|펀드|보험|운용|연금", na=False, regex=True)
+                institutional = shareholders[mask]
+                
+                # stkrt 컬럼에서 숫자만 추출하여 합산
+                if not institutional.empty:
+                    institutional_ratio = pd.to_numeric(institutional["stkrt"], errors="coerce").sum()
 
             rows.append({
                 "stock_code": code,
                 "largest_shareholder_ratio": _parse_ratio(largest_ratio),
-                "institutional_ratio": _parse_ratio(institutional_ratio),
+                "institutional_ratio": institutional_ratio,
             })
 
         except Exception as exc:

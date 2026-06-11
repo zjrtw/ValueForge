@@ -24,7 +24,7 @@ class GeminiClient:
     - AI_API_KEY 미설정 시 is_available() == False → 파이프라인 graceful skip용
     - 요청 간 rate_limit_sleep 초 대기 (Flash 기본 4초 → 15 RPM 한도 내)
     - 일시적 오류에 대해 지수 백오프 재시도 (최대 3회: 10초 → 20초 → 40초)
-    - google-generativeai 지연 임포트 → API 키 없는 환경에서 패키지 없어도 동작
+    - google-genai 지연 임포트 → API 키 없는 환경에서 패키지 없어도 동작
     """
 
     def __init__(
@@ -36,22 +36,21 @@ class GeminiClient:
         self._model_name = model
         self._rate_limit_sleep = rate_limit_sleep
         self._last_call_time: float = 0.0
-        self._genai_model: Any = None
+        self._client: Any = None
 
         key = api_key if api_key is not None else settings.AI_API_KEY
         if key:
             self._init_model(key, model)
 
     def _init_model(self, api_key: str, model: str) -> None:
-        import google.generativeai as genai  # 지연 임포트
+        from google import genai  # 지연 임포트
 
-        genai.configure(api_key=api_key)
-        self._genai_model = genai.GenerativeModel(model)
+        self._client = genai.Client(api_key=api_key)
         log.info("gemini_client_initialized", model=model)
 
     def is_available(self) -> bool:
         """API 키가 설정되어 모델이 초기화된 경우 True."""
-        return self._genai_model is not None
+        return self._client is not None
 
     def generate(self, prompt: str) -> str:
         """프롬프트를 Gemini 모델에 전달하고 텍스트 응답을 반환합니다.
@@ -81,24 +80,12 @@ class GeminiClient:
     @with_retry(max_attempts=3, delay=_RETRY_DELAY, backoff=2.0, exceptions=(Exception,))
     def _call_api_with_retry(self, prompt: str) -> str:
         """실제 Gemini API를 호출합니다. with_retry가 일시적 오류 시 재시도합니다."""
-        response = self._genai_model.generate_content(prompt)
+        response = self._client.models.generate_content(model=self._model_name, contents=prompt)
         self._last_call_time = time.time()
 
-        # [안정성] 응답 후보(candidates)가 없거나 필터링된 경우 처리
-        if not response.candidates:
-            log.warning("gemini_no_candidates", model=self._model_name)
-            raise GeminiClientError("Gemini 응답 후보가 없습니다. (안전 필터 등에 의해 차단되었을 수 있음)")
+        if not response.text:
+            log.warning("gemini_empty_response", model=self._model_name)
+            raise GeminiClientError("Gemini 응답 텍스트가 비어 있습니다. (차단되었을 수 있음)")
 
-        text: str = ""
-        try:
-            text = response.text
-        except ValueError as exc:
-            # response.text 접근 시 필터링된 경우 ValueError 발생 가능
-            log.warning("gemini_text_access_failed", model=self._model_name)
-            raise GeminiClientError("Gemini 응답 텍스트에 접근할 수 없습니다. (차단된 콘텐츠)") from exc
-
-        if not text:
-            raise GeminiClientError("Gemini 응답 텍스트가 비어 있습니다.")
-
-        log.debug("gemini_response_received", model=self._model_name, chars=len(text))
-        return text
+        log.debug("gemini_response_received", model=self._model_name, chars=len(response.text))
+        return response.text
