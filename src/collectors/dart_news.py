@@ -3,8 +3,6 @@
 from datetime import datetime, timedelta
 from typing import Any
 
-import pandas as pd
-
 from src.utils.config import settings
 from src.utils.logger import get_logger
 
@@ -41,30 +39,28 @@ def fetch_recent_disclosures(
     rows: list[dict[str, Any]] = []
 
     try:
-        # 최근 공시 정보 조회
-        disclosures = client.finstate_all_search(code)
+        # 최근 공시 목록 조회
+        start_date = (datetime.now() - timedelta(days=days)).strftime("%Y%m%d")
+        disclosures = client.list(code, start=start_date)
 
         if disclosures is None or disclosures.empty:
             return []
 
-        # 최근 30일 공시만 필터
-        cutoff_date = (datetime.now() - timedelta(days=days)).date()
-        recent = disclosures[
-            pd.to_datetime(disclosures.get("dcls_date", ""), errors="coerce").dt.date >= cutoff_date
-        ]
-
-        if recent.empty:
-            return []
-
-        for _, row in recent.iterrows():
+        for _, row in disclosures.iterrows():
             try:
                 title = row.get("report_nm", "")
-                date = row.get("dcls_date", "")
+                date_str = row.get("rcept_dt", "")
+                
+                # YYYYMMDD -> YYYY-MM-DD
+                if len(date_str) == 8:
+                    date = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
+                else:
+                    date = date_str
 
                 rows.append({
                     "stock_code": code,
                     "title": title,
-                    "date": str(date),
+                    "date": date,
                     "summary": f"공시: {title} ({date})",
                 })
             except Exception:
