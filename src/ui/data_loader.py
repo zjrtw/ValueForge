@@ -248,7 +248,7 @@ def get_latest_run_date(conn: sqlite3.Connection) -> str | None:
 
 @st.cache_data(ttl=1800)
 def load_ai_insight(stock_code: str) -> dict | None:
-    """종목의 최신 AI 인사이트를 반환한다. 데이터 없으면 None."""
+    """종목의 최신 AI 인사이트(가이드)를 반환한다. 데이터 없으면 None."""
     conn = get_db_connection()
     try:
         row = conn.execute(
@@ -256,6 +256,26 @@ def load_ai_insight(stock_code: str) -> dict | None:
             SELECT ticker, run_date, guide_text, sentiment, generated_at, model_used
             FROM ai_insights
             WHERE ticker = ?
+            ORDER BY run_date DESC
+            LIMIT 1
+            """,
+            (stock_code,),
+        ).fetchone()
+    except Exception:
+        return None
+    return dict(row) if row else None
+
+
+@st.cache_data(ttl=1800)
+def load_ai_analysis(stock_code: str) -> dict | None:
+    """종목의 최신 종합 AI 분석을 반환한다. 데이터 없으면 None."""
+    conn = get_db_connection()
+    try:
+        row = conn.execute(
+            """
+            SELECT stock_code, run_date, analysis_text, analysis_type, generated_at
+            FROM ai_analysis
+            WHERE stock_code = ?
             ORDER BY run_date DESC
             LIMIT 1
             """,
