@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from src.ui.components.radar_chart import render_radar
-from src.ui.data_loader import load_ai_insight, load_rankings, load_stock_detail
+from src.ui.data_loader import load_ai_analysis, load_ai_insight, load_rankings, load_stock_detail
 from src.ui.metric_guides import metric_help
 
 _RADAR_DIMS = [
@@ -285,3 +285,14 @@ def render(stock_code: str | None = None) -> None:
             st.caption(f"생성일: {run_date} · 모델: {model}")
 
         st.info(insight.get("guide_text", ""))
+
+    # ── AI 종합 분석 ─────────────────────────────────────────────────────────
+    analysis = load_ai_analysis(stock_code)
+    if analysis:
+        st.divider()
+        st.subheader("AI 종합 분석")
+        
+        run_date = analysis.get("run_date", "")
+        st.caption(f"분석 기준일: {run_date}")
+        
+        st.markdown(analysis.get("analysis_text", ""))
