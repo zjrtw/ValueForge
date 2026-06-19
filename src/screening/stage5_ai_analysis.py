@@ -1,10 +1,13 @@
 import re
 import sqlite3
+import time
 from datetime import UTC, datetime
 from typing import Any
 
 import pandas as pd
 
+from src.analysis.ai_analyst import generate_investment_analysis
+from src.collectors.dart_news import summarize_disclosure_news
 from src.collectors.gemini_client import GeminiClient
 from src.collectors.news_collector import NewsArticle, fetch_stock_news
 from src.db.repository import Repository
@@ -24,9 +27,10 @@ def stage5_ai_analysis(
 ) -> int:
     """Stage 5 AI 정성 분석.
 
-    Stage 4 순위 DataFrame에서 상위 N개 종목을 선택해 뉴스를 수집하고,
-    Gemini API로 투자 가이드를 생성 후 ai_insights 테이블에 저장한다.
-    AI_API_KEY 미설정 시 0 반환 후 건너뜀.
+    Stage 4 순위 DataFrame에서 상위 N개 종목을 선택해
+    1. AI 투자 가이드 (뉴스 기반, ai_insights 테이블)
+    2. AI 종합 분석 (재무 기반, ai_analysis 테이블)
+    을 생성하고 저장한다.
 
     Returns:
         저장된 ai_insights 행 수
@@ -42,9 +46,8 @@ def stage5_ai_analysis(
         rate_limit_sleep=float(p.get("rate_limit_sleep", 4.0)),
     )
 
-    if not client.is_available():
-        log.info("stage5_skipped", reason="AI_API_KEY not set")
-        return 0
+    # API 키가 없어도 ai_analyst의 fallback 기능을 사용하기 위해 skip하지 않음
+    # (GeminiClient.is_available()은 client.generate 호출 시 체크됨)
 
     if ranked_df.empty or "stock_name" not in ranked_df.columns:
         log.info("stage5_skipped", reason="no ranked stocks")
@@ -59,36 +62,80 @@ def stage5_ai_analysis(
     repo = Repository(conn)
     insights: list[dict[str, Any]] = []
 
-    for _, row in top_stocks.iterrows():
+    for idx, (_, row) in enumerate(top_stocks.iterrows()):
         stock_code = str(row.get("stock_code", "")).zfill(6)
         stock_name = str(row.get("stock_name", ""))
 
-        news_articles = fetch_stock_news(stock_code, company_name=stock_name, max_articles=10)
-        prompt = _build_prompt(row, news_articles)
+        log.info("stage5_processing", stock_code=stock_code, stock_name=stock_name)
 
+        # 1. AI 투자 가이드 (뉴스 기반)
+        if client.is_available():
+            news_articles = fetch_stock_news(stock_code, company_name=stock_name, max_articles=10)
+            prompt = _build_prompt(row, news_articles)
+
+            try:
+                guide_text = client.generate(prompt)
+                sentiment = _parse_sentiment(guide_text)
+
+                insights.append({
+                    "ticker": stock_code,
+                    "run_date": run_date,
+                    "guide_text": guide_text,
+                    "sentiment": sentiment,
+                    "generated_at": _utc_now(),
+                    "model_used": model_name,
+                })
+                log.info("stage5_insight_generated", stock_code=stock_code, sentiment=sentiment)
+            except Exception as exc:
+                log.warning("stage5_insight_failed", stock_code=stock_code, error=str(exc))
+        
+        # 2. AI 종합 분석 (재무/공시 기반)
         try:
-            guide_text = client.generate(prompt)
+            # 점수 정보
+            scores = {
+                "composite_score": _as_float(row.get("composite_score")),
+                "value_score": _as_float(row.get("value_score")),
+                "quality_score": _as_float(row.get("quality_score")),
+                "safety_score": _as_float(row.get("safety_score")),
+                "growth_score": _as_float(row.get("growth_score")),
+                "momentum_score": _as_float(row.get("momentum_score")),
+            }
+            # 위험 플래그
+            risk_flags = str(row.get("risk_flags", "")).split(",") if row.get("risk_flags") else []
+            # 재무 정보
+            fundamentals = {
+                "per": row.get("per"),
+                "pbr": row.get("pbr"),
+                "roe": row.get("roe"),
+                "debt_ratio": row.get("debt_to_equity"),
+                "dividend_yield": row.get("dividend_yield"),
+                "market_cap_b": row.get("market_cap_b"),
+            }
+            # 시장 정보
+            market_info = {"market": row.get("market"), "sector": row.get("sector")}
+            # 공시 요약
+            disclosure_summary = summarize_disclosure_news(stock_code, stock_name, days=30)
+
+            analysis_text = generate_investment_analysis(
+                stock_code, stock_name, scores, risk_flags, fundamentals, market_info, disclosure_summary
+            )
+            repo.upsert_ai_analysis(stock_code, run_date, analysis_text)
+            log.info("stage5_analysis_generated", stock_code=stock_code)
         except Exception as exc:
-            log.warning("stage5_gemini_failed", stock_code=stock_code, error=str(exc))
-            continue
-
-        sentiment = _parse_sentiment(guide_text)
-
-        insights.append({
-            "ticker": stock_code,
-            "run_date": run_date,
-            "guide_text": guide_text,
-            "sentiment": sentiment,
-            "generated_at": _utc_now(),
-            "model_used": model_name,
-        })
-        log.info("stage5_insight_generated", stock_code=stock_code, stock_name=stock_name, sentiment=sentiment)
+            log.warning("stage5_analysis_failed", stock_code=stock_code, error=str(exc))
 
     if insights:
         repo.upsert_ai_insights(insights)
-        log.info("stage5_complete", saved=len(insights), top_n=top_n)
+        log.info("stage5_complete", saved_insights=len(insights), top_n=top_n)
     
     return len(insights)
+
+
+def _as_float(val: Any) -> float:
+    try:
+        return float(val) if pd.notna(val) else 0.0
+    except (ValueError, TypeError):
+        return 0.0
 
 
 def _build_prompt(row: pd.Series, news_articles: list[NewsArticle]) -> str:
